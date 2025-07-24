@@ -28,8 +28,8 @@ interface CustomerProfile {
   customer: Customer
   orderHistory: Array<{
     _id: string
-    orderId: string
-    totalAmount: number
+    orderNumber: string // Changed from orderId to orderNumber
+    total: number // Changed from totalAmount to total
     status: string
     items: Array<{
       name: string
@@ -477,11 +477,13 @@ export default function CustomersPage() {
                         <div key={order._id} className="bg-white p-4 rounded-lg border border-gray-200">
                           <div className="flex justify-between items-start mb-3">
                             <div>
-                              <p className="font-medium text-slate-800">#{order.orderId}</p>
+                              <p className="font-medium text-slate-800">#{order.orderNumber}</p>{" "}
+                              {/* Changed from order.orderId */}
                               <p className="text-sm text-gray-600">{formatDate(order.createdAt)}</p>
                             </div>
                             <div className="text-right">
-                              <p className="font-semibold text-slate-800">{formatCurrency(order.totalAmount)}</p>
+                              <p className="font-semibold text-slate-800">{formatCurrency(order.total)}</p>{" "}
+                              {/* Changed from order.totalAmount */}
                               <Badge variant="outline" className="text-xs mt-1">
                                 {order.status}
                               </Badge>
