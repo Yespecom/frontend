@@ -1,15 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-
 import AdminLayout from "@/components/admin-layout"
-
 import { Button } from "@/components/ui/button"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-
 import {
   Dialog,
   DialogContent,
@@ -18,17 +13,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
 import { ShoppingCart, Eye, Package, User, MapPin, CreditCard } from "lucide-react"
-
 import { useToast } from "@/hooks/use-toast"
 
 interface Order {
   _id: string
-  orderId: string
-  customer: {
+  orderNumber: string // Changed from orderId to orderNumber based on sample data
+  customerInfo: {
+    // Changed from customer to customerInfo based on sample data
     name: string
     email: string
     phone: string
@@ -36,25 +29,27 @@ interface Order {
       street: string
       city: string
       state: string
-      pincode: string
+      zipCode: string // Changed from pincode to zipCode based on sample data
+      country: string
     }
   }
   items: Array<{
-    product: {
-      _id: string
-      name: string
-      images: string[]
-    }
+    productId: string // Changed from product._id to productId
     name: string
     price: number
     quantity: number
     total: number
+    // Assuming images are not directly on item, but on product. Will use placeholder if product.images is not available.
   }>
-  totalAmount: number
+  subtotal: number // Changed from totalAmount to subtotal based on sample data
+  tax: number
+  shipping: number
+  discount: number
+  total: number // This is the final total amount
   status: string
   paymentMethod: string
-  paymentId: string
   paymentStatus: string
+  notes?: string // Added notes based on sample data
   createdAt: string
   updatedAt: string
 }
@@ -64,7 +59,6 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
-
   const { toast } = useToast()
 
   useEffect(() => {
@@ -73,19 +67,29 @@ export default function OrdersPage() {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem("token")
+      const token = localStorage.getItem("token") // Assuming token is stored in localStorage
       const response = await fetch("https://api.yespstudio.com/api/admin/orders", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-
       if (response.ok) {
         const data = await response.json()
         setOrders(data)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch orders. Please check your authentication.",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error fetching orders:", error)
+      toast({
+        title: "Error",
+        description: "Something went wrong while fetching orders. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -102,15 +106,14 @@ export default function OrdersPage() {
         },
         body: JSON.stringify({ status: newStatus }),
       })
-
       if (response.ok) {
         toast({
           title: "Order updated",
           description: `Order status changed to ${newStatus}`,
         })
-        fetchOrders()
+        fetchOrders() // Re-fetch orders to update the list
         if (selectedOrder && selectedOrder._id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status: newStatus })
+          setSelectedOrder({ ...selectedOrder, status: newStatus }) // Update selected order in dialog
         }
       } else {
         toast({
@@ -146,7 +149,7 @@ export default function OrdersPage() {
   }
 
   const getPaymentStatusColor = (status: string) => {
-    return status === "success"
+    return status.toLowerCase() === "success" || status.toLowerCase() === "paid"
       ? "bg-green-50 text-green-700 border border-green-200"
       : "bg-red-50 text-red-700 border border-red-200"
   }
@@ -189,7 +192,6 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
           <p className="text-gray-600 text-sm">Manage customer orders and fulfillment</p>
         </div>
-
         {/* Orders Table */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="border-b border-gray-200 bg-white">
@@ -208,7 +210,6 @@ export default function OrdersPage() {
                       <ShoppingCart className="h-10 w-10 text-slate-400" />
                     </div>
                   </div>
-
                   {/* Floating Elements Animation */}
                   <div className="absolute top-0 left-1/2 transform -translate-x-1/2">
                     <div className="animate-pulse">
@@ -224,12 +225,10 @@ export default function OrdersPage() {
                     </div>
                   </div>
                 </div>
-
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">No orders yet</h3>
                 <p className="text-gray-500 mb-6 max-w-md mx-auto">
                   Your orders will appear here when customers start making purchases from your store.
                 </p>
-
                 {/* Animated Waiting Dots */}
                 <div className="flex justify-center space-x-1">
                   <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce"></div>
@@ -261,11 +260,11 @@ export default function OrdersPage() {
                   <TableBody>
                     {orders.map((order) => (
                       <TableRow key={order._id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <TableCell className="font-mono font-medium text-slate-800">#{order.orderId}</TableCell>
+                        <TableCell className="font-mono font-medium text-slate-800">#{order.orderNumber}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium text-slate-800">{order.customer.name}</p>
-                            <p className="text-sm text-gray-500">{order.customer.email}</p>
+                            <p className="font-medium text-slate-800">{order.customerInfo.name}</p>
+                            <p className="text-sm text-gray-500">{order.customerInfo.email}</p>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -277,7 +276,7 @@ export default function OrdersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-semibold text-slate-800">{formatCurrency(order.totalAmount)}</span>
+                          <span className="font-semibold text-slate-800">{formatCurrency(order.total)}</span>
                         </TableCell>
                         <TableCell>
                           <span
@@ -303,7 +302,10 @@ export default function OrdersPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => setSelectedOrder(order)}
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  setDialogOpen(true)
+                                }}
                                 className="hover:bg-slate-100"
                               >
                                 <Eye className="h-4 w-4" />
@@ -312,13 +314,12 @@ export default function OrdersPage() {
                             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                               <DialogHeader className="border-b border-gray-200 pb-4">
                                 <DialogTitle className="text-xl font-semibold text-slate-900">
-                                  Order Details - #{selectedOrder?.orderId}
+                                  Order Details - #{selectedOrder?.orderNumber}
                                 </DialogTitle>
                                 <DialogDescription className="text-gray-600">
                                   View and manage order information
                                 </DialogDescription>
                               </DialogHeader>
-
                               {selectedOrder && (
                                 <div className="space-y-6 pt-4">
                                   {/* Customer Info */}
@@ -331,15 +332,21 @@ export default function OrdersPage() {
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                           <p className="text-sm text-gray-500">Name</p>
-                                          <p className="font-medium text-slate-800">{selectedOrder.customer.name}</p>
+                                          <p className="font-medium text-slate-800">
+                                            {selectedOrder.customerInfo.name}
+                                          </p>
                                         </div>
                                         <div>
                                           <p className="text-sm text-gray-500">Email</p>
-                                          <p className="font-medium text-slate-800">{selectedOrder.customer.email}</p>
+                                          <p className="font-medium text-slate-800">
+                                            {selectedOrder.customerInfo.email}
+                                          </p>
                                         </div>
                                         <div>
                                           <p className="text-sm text-gray-500">Phone</p>
-                                          <p className="font-medium text-slate-800">{selectedOrder.customer.phone}</p>
+                                          <p className="font-medium text-slate-800">
+                                            {selectedOrder.customerInfo.phone}
+                                          </p>
                                         </div>
                                         <div>
                                           <p className="text-sm text-gray-500 flex items-center gap-1">
@@ -347,16 +354,16 @@ export default function OrdersPage() {
                                             Address
                                           </p>
                                           <p className="font-medium text-slate-800">
-                                            {selectedOrder.customer.address.street},{" "}
-                                            {selectedOrder.customer.address.city},{" "}
-                                            {selectedOrder.customer.address.state} -{" "}
-                                            {selectedOrder.customer.address.pincode}
+                                            {selectedOrder.customerInfo.address.street},{" "}
+                                            {selectedOrder.customerInfo.address.city},{" "}
+                                            {selectedOrder.customerInfo.address.state} -{" "}
+                                            {selectedOrder.customerInfo.address.zipCode},{" "}
+                                            {selectedOrder.customerInfo.address.country}
                                           </p>
                                         </div>
                                       </div>
                                     </div>
                                   </div>
-
                                   {/* Order Items */}
                                   <div>
                                     <div className="flex items-center gap-2 mb-3">
@@ -370,17 +377,10 @@ export default function OrdersPage() {
                                           className="flex items-center justify-between bg-white p-4 rounded-lg border border-gray-200"
                                         >
                                           <div className="flex items-center gap-3">
-                                            {item.product.images.length > 0 ? (
-                                              <img
-                                                src={`http://localhost:5000${item.product.images[0]}`}
-                                                alt={item.name}
-                                                className="w-12 h-12 rounded-lg object-cover border border-gray-200"
-                                              />
-                                            ) : (
-                                              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
-                                                <Package className="h-6 w-6 text-gray-400" />
-                                              </div>
-                                            )}
+                                            {/* Placeholder for product image as it's not in the item directly */}
+                                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                                              <Package className="h-6 w-6 text-gray-400" />
+                                            </div>
                                             <div>
                                               <p className="font-medium text-slate-800">{item.name}</p>
                                               <p className="text-sm text-gray-600">
@@ -393,7 +393,6 @@ export default function OrdersPage() {
                                       ))}
                                     </div>
                                   </div>
-
                                   {/* Order Summary */}
                                   <div>
                                     <div className="flex items-center gap-2 mb-3">
@@ -403,9 +402,33 @@ export default function OrdersPage() {
                                     <div className="bg-gray-50 p-4 rounded-lg">
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="flex justify-between">
+                                          <span className="text-gray-600">Subtotal:</span>
+                                          <span className="font-semibold text-slate-800">
+                                            {formatCurrency(selectedOrder.subtotal)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Tax:</span>
+                                          <span className="font-semibold text-slate-800">
+                                            {formatCurrency(selectedOrder.tax)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Shipping:</span>
+                                          <span className="font-semibold text-slate-800">
+                                            {formatCurrency(selectedOrder.shipping)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Discount:</span>
+                                          <span className="font-semibold text-slate-800">
+                                            {formatCurrency(selectedOrder.discount)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
                                           <span className="text-gray-600">Total Amount:</span>
                                           <span className="font-semibold text-slate-800">
-                                            {formatCurrency(selectedOrder.totalAmount)}
+                                            {formatCurrency(selectedOrder.total)}
                                           </span>
                                         </div>
                                         <div className="flex justify-between">
@@ -428,10 +451,17 @@ export default function OrdersPage() {
                                             {formatDate(selectedOrder.createdAt)}
                                           </span>
                                         </div>
+                                        {selectedOrder.notes && (
+                                          <div className="col-span-full">
+                                            <span className="text-gray-600">Notes:</span>
+                                            <span className="font-medium text-slate-800 ml-2">
+                                              {selectedOrder.notes}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
-
                                   {/* Status Update */}
                                   <div>
                                     <h3 className="font-semibold text-slate-900 mb-3">Update Order Status</h3>
