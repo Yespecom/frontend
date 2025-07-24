@@ -14,14 +14,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Eye, Package, User, MapPin, CreditCard } from "lucide-react"
+import { ShoppingCart, Eye, Package, User, MapPin, CreditCard, Printer } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import InvoiceDocument from "@/components/invoice-document"
+import LabelDocument from "@/components/label-document"
+import { printDocument } from "@/lib/print-utils"
 
 interface Order {
   _id: string
-  orderNumber: string // Changed from orderId to orderNumber based on sample data
+  orderNumber: string
+  customerId: string // Added customerId based on sample data
   customerInfo: {
-    // Changed from customer to customerInfo based on sample data
     name: string
     email: string
     phone: string
@@ -29,29 +32,62 @@ interface Order {
       street: string
       city: string
       state: string
-      zipCode: string // Changed from pincode to zipCode based on sample data
+      zipCode: string
       country: string
     }
   }
   items: Array<{
-    productId: string // Changed from product._id to productId
+    productId: string // This will be populated with product details
     name: string
     price: number
     quantity: number
     total: number
-    // Assuming images are not directly on item, but on product. Will use placeholder if product.images is not available.
+    _id: string // Added _id for item based on sample data
   }>
-  subtotal: number // Changed from totalAmount to subtotal based on sample data
+  subtotal: number
   tax: number
   shipping: number
   discount: number
-  total: number // This is the final total amount
+  total: number
   status: string
-  paymentMethod: string
   paymentStatus: string
-  notes?: string // Added notes based on sample data
+  paymentMethod: string
+  notes?: string
   createdAt: string
   updatedAt: string
+}
+
+// Shop information (placeholder - update with your actual shop details)
+const shopInfo = {
+  name: "YesP Studio",
+  address: {
+    street: "456 Commerce St",
+    city: "Chennai",
+    state: "Tamil Nadu",
+    zipCode: "600001",
+    country: "India",
+  },
+  phone: "+919876543210",
+  email: "info@yespstudio.com",
+  website: "www.yespstudio.com",
+}
+
+// Re-exporting formatters for use in print components
+export const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+  }).format(amount)
+}
+
+export const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function OrdersPage() {
@@ -67,7 +103,7 @@ export default function OrdersPage() {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem("token") // Assuming token is stored in localStorage
+      const token = localStorage.getItem("token")
       const response = await fetch("https://api.yespstudio.com/api/admin/orders", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -111,9 +147,9 @@ export default function OrdersPage() {
           title: "Order updated",
           description: `Order status changed to ${newStatus}`,
         })
-        fetchOrders() // Re-fetch orders to update the list
+        fetchOrders()
         if (selectedOrder && selectedOrder._id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status: newStatus }) // Update selected order in dialog
+          setSelectedOrder({ ...selectedOrder, status: newStatus })
         }
       } else {
         toast({
@@ -154,21 +190,24 @@ export default function OrdersPage() {
       : "bg-red-50 text-red-700 border border-red-200"
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount)
+  const handlePrintInvoice = () => {
+    if (selectedOrder) {
+      printDocument(
+        InvoiceDocument,
+        { order: selectedOrder, shopInfo },
+        { title: `Invoice - ${selectedOrder.orderNumber}` },
+      )
+    }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+  const handlePrintLabel = () => {
+    if (selectedOrder) {
+      printDocument(
+        LabelDocument,
+        { order: selectedOrder, shopInfo },
+        { title: `Shipping Label - ${selectedOrder.orderNumber}` },
+      )
+    }
   }
 
   if (loading) {
@@ -480,6 +519,17 @@ export default function OrdersPage() {
                                         <SelectItem value="cancelled">Cancelled</SelectItem>
                                       </SelectContent>
                                     </Select>
+                                  </div>
+                                  {/* Print Buttons */}
+                                  <div className="flex gap-4 justify-end border-t border-gray-200 pt-4">
+                                    <Button variant="outline" onClick={handlePrintInvoice}>
+                                      <Printer className="h-4 w-4 mr-2" />
+                                      Print Invoice
+                                    </Button>
+                                    <Button variant="outline" onClick={handlePrintLabel}>
+                                      <Printer className="h-4 w-4 mr-2" />
+                                      Print Label
+                                    </Button>
                                   </div>
                                 </div>
                               )}
