@@ -62,19 +62,16 @@ export default function CustomersPage() {
     try {
       setLoading(true)
       const token = localStorage.getItem("token")
-
       if (!token) {
         console.error("No authentication token found")
         return
       }
-
       const response = await fetch("https://api.yespstudio.com/api/admin/customers", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       })
-
       if (response.ok) {
         const data = await response.json()
         setCustomers(data)
@@ -91,19 +88,16 @@ export default function CustomersPage() {
   const fetchCustomerProfile = async (customerId: string) => {
     try {
       const token = localStorage.getItem("token")
-
       if (!token) {
         console.error("No authentication token found")
         return
       }
-
       const response = await fetch(`https://api.yespstudio.com/api/admin/customers/${customerId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       })
-
       if (response.ok) {
         const data = await response.json()
         setSelectedCustomer(data)
@@ -118,7 +112,6 @@ export default function CustomersPage() {
 
   const filterAndSortCustomers = () => {
     let filtered = [...customers]
-
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(
@@ -128,7 +121,6 @@ export default function CustomersPage() {
           customer.phone.includes(searchTerm),
       )
     }
-
     // Apply status filter
     if (statusFilter !== "all") {
       filtered = filtered.filter((customer) => {
@@ -136,7 +128,6 @@ export default function CustomersPage() {
         return status.toLowerCase() === statusFilter
       })
     }
-
     // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -156,7 +147,6 @@ export default function CustomersPage() {
           return 0
       }
     })
-
     setFilteredCustomers(filtered)
   }
 
@@ -197,7 +187,6 @@ export default function CustomersPage() {
         ].join(","),
       ),
     ].join("\n")
-
     const blob = new Blob([csvContent], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -249,7 +238,6 @@ export default function CustomersPage() {
             Export CSV
           </Button>
         </div>
-
         {/* Filters and Search */}
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="p-4">
@@ -296,7 +284,6 @@ export default function CustomersPage() {
             </div>
           </CardContent>
         </Card>
-
         {/* Customers Table */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="border-b border-gray-200 bg-white">
@@ -318,7 +305,6 @@ export default function CustomersPage() {
                       <Users className="h-10 w-10 text-slate-400" />
                     </div>
                   </div>
-
                   {/* Floating Elements Animation */}
                   <div className="absolute top-0 left-1/2 transform -translate-x-1/2">
                     <div className="animate-pulse">
@@ -334,7 +320,6 @@ export default function CustomersPage() {
                     </div>
                   </div>
                 </div>
-
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                   {customers.length === 0 ? "No customers yet" : "No customers match your filters"}
                 </h3>
@@ -343,7 +328,6 @@ export default function CustomersPage() {
                     ? "Your customers will appear here when they make their first purchase from your store."
                     : "Try adjusting your search terms or filters to find the customers you're looking for."}
                 </p>
-
                 {/* Animated Waiting Dots */}
                 <div className="flex justify-center space-x-1">
                   <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce"></div>
@@ -420,7 +404,6 @@ export default function CustomersPage() {
             )}
           </CardContent>
         </Card>
-
         {/* Customer Profile Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -428,7 +411,6 @@ export default function CustomersPage() {
               <DialogTitle className="text-xl font-semibold text-slate-900">Customer Profile</DialogTitle>
               <DialogDescription className="text-gray-600">View customer details and order history</DialogDescription>
             </DialogHeader>
-
             {selectedCustomer && (
               <div className="space-y-6 pt-4">
                 {/* Customer Info */}
@@ -482,7 +464,6 @@ export default function CustomersPage() {
                     </div>
                   </div>
                 </div>
-
                 {/* Order History */}
                 <div>
                   <h3 className="font-semibold text-slate-900 mb-3">Order History</h3>
