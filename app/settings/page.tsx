@@ -293,52 +293,7 @@ export default function CombinedSettingsPage() {
     }
   }
 
-  const fetchStoreInfo = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/store-info`, {
-        headers: getAuthHeaders(),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStoreInfo(data)
-
-        // Update settings from store data
-        setGeneralSettings((prev) => ({
-          ...prev,
-          storeName: data.storeName || "",
-          logo: data.logo || "",
-          banner: data.banner || "",
-          tagline: data.general?.tagline || "",
-          supportEmail: data.general?.supportEmail || data.owner?.email || "",
-          supportPhone: data.general?.supportPhone || data.owner?.phone || "",
-        }))
-
-        setSocialSettings((prev) => ({
-          ...prev,
-          instagram: data.social?.instagram || "",
-          whatsapp: data.social?.whatsapp || data.owner?.phone || "",
-          facebook: data.social?.facebook || "",
-        }))
-
-        setShippingSettings((prev) => ({
-          ...prev,
-          deliveryTime: data.shipping?.deliveryTime || "2-3 business days",
-          charges: data.shipping?.charges || 0,
-          freeShippingAbove: data.shipping?.freeShippingAbove || 0,
-          availabilityArea: data.shipping?.availabilityArea || [],
-        }))
-      }
-    } catch (error) {
-      console.error("Error fetching store info:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load store information",
-        variant: "destructive",
-      })
-    }
-  }
-
+  // Update the fetchSettings function to handle payment and shipping data properly
   const fetchSettings = async (section: string) => {
     try {
       const response = await fetch(`${API_BASE}/settings/${section}`, {
@@ -347,6 +302,7 @@ export default function CombinedSettingsPage() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log(`Fetched ${section} settings:`, data) // Debug log
 
         switch (section) {
           case "general":
@@ -356,38 +312,126 @@ export default function CombinedSettingsPage() {
             setSocialSettings((prev) => ({ ...prev, ...data }))
             break
           case "payment":
-            setPaymentSettings((prev) => ({ ...prev, ...data }))
+            // Handle payment settings with proper mapping
+            setPaymentSettings((prev) => ({
+              ...prev,
+              razorpayKeyId: data.razorpay?.keyId || data.razorpayKeyId || "",
+              razorpayKeySecret: data.razorpay?.keySecret || data.razorpayKeySecret || "",
+              razorpayEnabled: data.razorpay?.enabled || data.razorpayEnabled || false,
+              stripePublicKey: data.stripe?.publishableKey || data.stripePublicKey || "",
+              stripeSecretKey: data.stripe?.secretKey || data.stripeSecretKey || "",
+              stripeEnabled: data.stripe?.enabled || data.stripeEnabled || false,
+              phonePeMerchantId: data.phonepe?.merchantId || data.phonePeMerchantId || "",
+              phonePeSaltKey: data.phonepe?.saltKey || data.phonePeSaltKey || "",
+              phonePeSaltIndex: data.phonepe?.saltIndex || data.phonePeSaltIndex || "",
+              phonePeEnvironment: data.phonepe?.environment || data.phonePeEnvironment || "sandbox",
+              phonePeWebhookUrl: data.phonepe?.webhookUrl || data.phonePeWebhookUrl || "",
+              phonePeEnabled: data.phonepe?.enabled || data.phonePeEnabled || false,
+              codEnabled: data.codEnabled !== undefined ? data.codEnabled : true,
+              onlinePaymentEnabled: data.onlinePaymentEnabled !== undefined ? data.onlinePaymentEnabled : false,
+            }))
             break
           case "shipping":
-            setShippingSettings((prev) => ({ ...prev, ...data }))
+            // Handle shipping settings with proper mapping
+            setShippingSettings((prev) => ({
+              ...prev,
+              deliveryTime: data.deliveryTime || "2-3 business days",
+              charges: data.charges || 0,
+              freeShippingAbove: data.freeShippingAbove || 0,
+              freeShippingEnabled: data.freeShippingEnabled || false,
+              availabilityArea: Array.isArray(data.availabilityArea) ? data.availabilityArea : [],
+              zones: Array.isArray(data.zones) ? data.zones : [],
+            }))
             break
         }
+      } else {
+        console.error(`Failed to fetch ${section} settings:`, response.status)
       }
     } catch (error) {
       console.error(`Error fetching ${section} settings:`, error)
     }
   }
 
+  // Update the updateSettings function to handle proper data structure
   const updateSettings = async (section: string, data: any) => {
     const sectionKey = section as keyof typeof isSubmitting
     setIsSubmitting((prev) => ({ ...prev, [sectionKey]: true }))
 
     try {
+      let requestData = data
+
+      // Transform payment data to match backend structure
+      if (section === "payment") {
+        requestData = {
+          codEnabled: data.codEnabled,
+          onlinePaymentEnabled: data.razorpayEnabled || data.stripeEnabled || data.phonePeEnabled,
+          razorpay: {
+            enabled: data.razorpayEnabled,
+            keyId: data.razorpayKeyId,
+            keySecret: data.razorpayKeySecret,
+          },
+          stripe: {
+            enabled: data.stripeEnabled,
+            publishableKey: data.stripePublicKey,
+            secretKey: data.stripeSecretKey,
+          },
+          phonepe: {
+            enabled: data.phonePeEnabled,
+            merchantId: data.phonePeMerchantId,
+            saltKey: data.phonePeSaltKey,
+            saltIndex: data.phonePeSaltIndex,
+            environment: data.phonePeEnvironment,
+            webhookUrl: data.phonePeWebhookUrl,
+          },
+          // Also send flat structure for backward compatibility
+          razorpayEnabled: data.razorpayEnabled,
+          razorpayKeyId: data.razorpayKeyId,
+          razorpayKeySecret: data.razorpayKeySecret,
+          stripeEnabled: data.stripeEnabled,
+          stripePublicKey: data.stripePublicKey,
+          stripeSecretKey: data.stripeSecretKey,
+          phonePeEnabled: data.phonePeEnabled,
+          phonePeMerchantId: data.phonePeMerchantId,
+          phonePeSaltKey: data.phonePeSaltKey,
+          phonePeSaltIndex: data.phonePeSaltIndex,
+          phonePeEnvironment: data.phonePeEnvironment,
+          phonePeWebhookUrl: data.phonePeWebhookUrl,
+        }
+      }
+
+      // Transform shipping data to match backend structure
+      if (section === "shipping") {
+        requestData = {
+          ...data,
+          freeShippingEnabled: data.freeShippingAbove > 0,
+          availabilityArea: data.availabilityArea.filter((area: string) => area.trim() !== ""),
+        }
+      }
+
+      console.log(`Updating ${section} settings with data:`, requestData) // Debug log
+
       const response = await fetch(`${API_BASE}/settings/${section}`, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestData),
       })
 
       if (response.ok) {
+        const responseData = await response.json()
+        console.log(`${section} settings updated successfully:`, responseData) // Debug log
+
         setLastSaved((prev) => ({ ...prev, [section]: new Date() }))
         toast({
           title: "Settings updated",
           description: `${section.charAt(0).toUpperCase() + section.slice(1)} settings have been updated successfully.`,
         })
+
+        // Refresh the specific section data after successful update
+        await fetchSettings(section)
         return true
       } else {
         const errorData = await response.json()
+        console.error(`Failed to update ${section} settings:`, errorData) // Debug log
         toast({
           title: "Error",
           description: errorData.error || "Failed to update settings",
@@ -408,29 +452,102 @@ export default function CombinedSettingsPage() {
     }
   }
 
-  const fetchAllSettings = async () => {
-    setLoading(true)
+  // Update fetchStoreInfo to better handle payment and shipping data
+  const fetchStoreInfo = async () => {
     try {
-      await fetchStoreInfo()
-      await Promise.all([
-        fetchSettings("general"),
-        fetchSettings("social"),
-        fetchSettings("payment"),
-        fetchSettings("shipping"),
-      ])
+      const response = await fetch(`${API_BASE}/store-info`, {
+        headers: getAuthHeaders(),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Store data received:", data) // Debug log
+        setStoreInfo(data)
+
+        // Update settings from store data with better mapping
+        setGeneralSettings((prev) => ({
+          ...prev,
+          storeName: data.storeName || "",
+          logo: data.logo || "",
+          banner: data.banner || "",
+          tagline: data.general?.tagline || "",
+          supportEmail: data.general?.supportEmail || data.owner?.email || "",
+          supportPhone: data.general?.supportPhone || data.owner?.phone || "",
+          storeDescription: data.general?.storeDescription || "",
+          favicon: data.general?.favicon || "",
+          timezone: data.general?.timezone || "Asia/Kolkata",
+          currency: data.general?.currency || "INR",
+          language: data.general?.language || "en",
+        }))
+
+        setSocialSettings((prev) => ({
+          ...prev,
+          instagram: data.social?.instagram || "",
+          whatsapp: data.social?.whatsapp || data.owner?.phone || "",
+          facebook: data.social?.facebook || "",
+          twitter: data.social?.twitter || "",
+          youtube: data.social?.youtube || "",
+          telegram: data.social?.telegram || "",
+        }))
+
+        // Handle payment settings from store data
+        if (data.payment) {
+          setPaymentSettings((prev) => ({
+            ...prev,
+            razorpayKeyId: data.payment.razorpay?.keyId || "",
+            razorpayKeySecret: data.payment.razorpay?.keySecret || "",
+            razorpayEnabled: data.payment.razorpay?.enabled || false,
+            stripePublicKey: data.payment.stripe?.publishableKey || "",
+            stripeSecretKey: data.payment.stripe?.secretKey || "",
+            stripeEnabled: data.payment.stripe?.enabled || false,
+            phonePeMerchantId: data.payment.phonepe?.merchantId || "",
+            phonePeSaltKey: data.payment.phonepe?.saltKey || "",
+            phonePeSaltIndex: data.payment.phonepe?.saltIndex || "",
+            phonePeEnvironment: data.payment.phonepe?.environment || "sandbox",
+            phonePeWebhookUrl: data.payment.phonepe?.webhookUrl || "",
+            phonePeEnabled: data.payment.phonepe?.enabled || false,
+            codEnabled: data.payment.codEnabled !== undefined ? data.payment.codEnabled : true,
+          }))
+        }
+
+        // Handle shipping settings from store data
+        if (data.shipping) {
+          setShippingSettings((prev) => ({
+            ...prev,
+            deliveryTime: data.shipping.deliveryTime || "2-3 business days",
+            charges: data.shipping.charges || 0,
+            freeShippingAbove: data.shipping.freeShippingAbove || 0,
+            freeShippingEnabled: data.shipping.freeShippingEnabled || false,
+            availabilityArea: Array.isArray(data.shipping.availabilityArea) ? data.shipping.availabilityArea : [],
+            zones: Array.isArray(data.shipping.zones) ? data.shipping.zones : [],
+          }))
+        }
+      }
     } catch (error) {
-      console.error("Error fetching settings:", error)
+      console.error("Error fetching store info:", error)
       toast({
         title: "Error",
-        description: "Failed to load settings. Please try again.",
+        description: "Failed to load store information",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
   useEffect(() => {
+    const fetchAllSettings = async () => {
+      setLoading(true)
+      try {
+        await Promise.all([
+          fetchStoreInfo(),
+          fetchSettings("general"),
+          fetchSettings("social"),
+          fetchSettings("payment"),
+          fetchSettings("shipping"),
+        ])
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchAllSettings()
   }, [])
 
@@ -779,6 +896,31 @@ export default function CombinedSettingsPage() {
                   </div>
 
                   <form onSubmit={updatePaymentSettings} className="space-y-8">
+                    {/* Cash on Delivery */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 pb-2">
+                        <CreditCard className="h-5 w-5 text-gray-600" />
+                        <h3 className="text-base font-semibold text-gray-900">Cash on Delivery</h3>
+                      </div>
+                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <Switch
+                          id="codEnabled"
+                          checked={paymentSettings.codEnabled}
+                          onCheckedChange={(checked) => handlePaymentChange("codEnabled", checked)}
+                        />
+                        <div className="flex-1">
+                          <Label htmlFor="codEnabled" className="text-gray-800 font-medium cursor-pointer">
+                            Enable Cash on Delivery
+                          </Label>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Allow customers to pay when they receive their order
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
                     {/* Razorpay Configuration */}
                     <div className="space-y-4">
                       <div className="flex items-center justify-between pb-2">
@@ -820,6 +962,14 @@ export default function CombinedSettingsPage() {
                           />
                         </div>
                       </div>
+                      {paymentSettings.razorpayEnabled && (
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <p className="text-sm text-green-800">
+                            <CheckCircle className="h-4 w-4 inline mr-1" />
+                            Razorpay is enabled and configured
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
@@ -916,6 +1066,14 @@ export default function CombinedSettingsPage() {
                         />
                         <p className="text-xs text-gray-500">URL to receive payment status updates from PhonePe</p>
                       </div>
+                      {paymentSettings.phonePeEnabled && (
+                        <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                          <p className="text-sm text-purple-800">
+                            <CheckCircle className="h-4 w-4 inline mr-1" />
+                            PhonePe is enabled for {paymentSettings.phonePeEnvironment} environment
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
@@ -961,37 +1119,31 @@ export default function CombinedSettingsPage() {
                           />
                         </div>
                       </div>
+                      {paymentSettings.stripeEnabled && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-blue-800">
+                            <CheckCircle className="h-4 w-4 inline mr-1" />
+                            Stripe is enabled and configured
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
-
-                    {/* Payment Methods */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 pb-2">
-                        <CreditCard className="h-5 w-5 text-gray-600" />
-                        <h3 className="text-base font-semibold text-gray-900">Payment Methods</h3>
-                      </div>
-                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <Switch
-                          id="codEnabled"
-                          checked={paymentSettings.codEnabled}
-                          onCheckedChange={(checked) => handlePaymentChange("codEnabled", checked)}
-                        />
-                        <div className="flex-1">
-                          <Label htmlFor="codEnabled" className="text-gray-800 font-medium cursor-pointer">
-                            Enable Cash on Delivery
-                          </Label>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Allow customers to pay when they receive their order
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Payment Gateway Status */}
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                       <h4 className="font-medium text-gray-900 mb-3">Active Payment Gateways</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div
+                          className={`flex items-center p-3 rounded-lg border ${
+                            paymentSettings.codEnabled ? "bg-green-50 border-green-200" : "bg-gray-100 border-gray-200"
+                          }`}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          <span className="text-sm font-medium">COD</span>
+                          {paymentSettings.codEnabled && <CheckCircle className="h-4 w-4 text-green-600 ml-auto" />}
+                        </div>
                         <div
                           className={`flex items-center p-3 rounded-lg border ${
                             paymentSettings.razorpayEnabled
@@ -1027,14 +1179,37 @@ export default function CombinedSettingsPage() {
                           <span className="text-sm font-medium">Stripe</span>
                           {paymentSettings.stripeEnabled && <CheckCircle className="h-4 w-4 text-green-600 ml-auto" />}
                         </div>
-                        <div
-                          className={`flex items-center p-3 rounded-lg border ${
-                            paymentSettings.codEnabled ? "bg-green-50 border-green-200" : "bg-gray-100 border-gray-200"
-                          }`}
-                        >
-                          <CreditCard className="h-4 w-4 mr-2" />
-                          <span className="text-sm font-medium">COD</span>
-                          {paymentSettings.codEnabled && <CheckCircle className="h-4 w-4 text-green-600 ml-auto" />}
+                      </div>
+
+                      {/* Payment Summary */}
+                      <div className="mt-4 p-3 bg-white rounded border">
+                        <h5 className="font-medium text-gray-800 mb-2">Configuration Summary</h5>
+                        <div className="text-sm space-y-1">
+                          <div className="flex justify-between">
+                            <span>Total Active Gateways:</span>
+                            <span className="font-medium">
+                              {
+                                [
+                                  paymentSettings.codEnabled,
+                                  paymentSettings.razorpayEnabled,
+                                  paymentSettings.phonePeEnabled,
+                                  paymentSettings.stripeEnabled,
+                                ].filter(Boolean).length
+                              }
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Online Payment:</span>
+                            <span
+                              className={`font-medium ${paymentSettings.razorpayEnabled || paymentSettings.stripeEnabled || paymentSettings.phonePeEnabled ? "text-green-600" : "text-red-600"}`}
+                            >
+                              {paymentSettings.razorpayEnabled ||
+                              paymentSettings.stripeEnabled ||
+                              paymentSettings.phonePeEnabled
+                                ? "Enabled"
+                                : "Disabled"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1080,6 +1255,7 @@ export default function CombinedSettingsPage() {
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label htmlFor="charges" className="text-sm font-semibold text-gray-700">
@@ -1114,6 +1290,7 @@ export default function CombinedSettingsPage() {
                         />
                       </div>
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="availabilityArea" className="text-sm font-semibold text-gray-700">
                         Availability Areas
@@ -1133,6 +1310,59 @@ export default function CombinedSettingsPage() {
                       />
                       <p className="text-xs text-gray-500">Enter areas separated by commas</p>
                     </div>
+
+                    {/* Free Shipping Toggle */}
+                    <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <Switch
+                        id="freeShippingEnabled"
+                        checked={shippingSettings.freeShippingAbove > 0}
+                        onCheckedChange={(checked) => {
+                          if (!checked) {
+                            handleShippingChange("freeShippingAbove", 0)
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="freeShippingEnabled" className="text-gray-800 font-medium cursor-pointer">
+                          Enable Free Shipping
+                        </Label>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Offer free shipping when order value exceeds the specified amount
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Shipping Summary */}
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h4 className="font-medium text-blue-900 mb-3">Shipping Summary</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-blue-700">Standard Shipping:</span>
+                          <span className="font-medium text-blue-900">₹{shippingSettings.charges}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-blue-700">Free Shipping Above:</span>
+                          <span className="font-medium text-blue-900">
+                            {shippingSettings.freeShippingAbove > 0
+                              ? `₹${shippingSettings.freeShippingAbove}`
+                              : "Disabled"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-blue-700">Delivery Time:</span>
+                          <span className="font-medium text-blue-900">
+                            {shippingSettings.deliveryTime || "Not set"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-blue-700">Service Areas:</span>
+                          <span className="font-medium text-blue-900">
+                            {shippingSettings.availabilityArea.length} areas
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex justify-end pt-4">
                       <Button
                         type="submit"
