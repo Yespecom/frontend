@@ -28,6 +28,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
+// Types
 interface GeneralSettings {
   storeName: string
   logo: string
@@ -35,12 +36,27 @@ interface GeneralSettings {
   tagline: string
   supportEmail: string
   supportPhone: string
+  storeDescription?: string
+  favicon?: string
+  address?: {
+    street: string
+    city: string
+    state: string
+    zipCode: string
+    country: string
+  }
+  timezone?: string
+  currency?: string
+  language?: string
 }
 
 interface SocialSettings {
   instagram: string
   whatsapp: string
   facebook: string
+  twitter?: string
+  youtube?: string
+  telegram?: string
 }
 
 interface PaymentSettings {
@@ -57,6 +73,9 @@ interface PaymentSettings {
   razorpayEnabled: boolean
   stripeEnabled: boolean
   phonePeEnabled: boolean
+  paypalEnabled?: boolean
+  paypalClientId?: string
+  paypalClientSecret?: string
 }
 
 interface ShippingSettings {
@@ -64,6 +83,13 @@ interface ShippingSettings {
   charges: number
   freeShippingAbove: number
   availabilityArea: string[]
+  freeShippingEnabled?: boolean
+  zones?: Array<{
+    name: string
+    areas: string[]
+    charge: number
+    deliveryTime: string
+  }>
 }
 
 interface StoreInfo {
@@ -87,7 +113,14 @@ interface StoreInfo {
   tenantId: string
 }
 
-const settingsNavigation = [
+interface SettingsSection {
+  id: string
+  name: string
+  icon: any
+  description: string
+}
+
+const settingsNavigation: SettingsSection[] = [
   {
     id: "general",
     name: "General",
@@ -114,7 +147,7 @@ const settingsNavigation = [
   },
 ]
 
-// Skeleton Components (keeping existing ones for brevity)
+// Skeleton Components
 const HeaderSkeleton = () => (
   <div className="bg-white border-b border-gray-200 px-6 py-4">
     <div>
@@ -156,75 +189,49 @@ const SidebarSkeleton = () => (
   </div>
 )
 
-const PaymentSettingsSkeleton = () => (
-  <Card className="shadow-sm border-gray-200">
-    <CardHeader className="bg-gray-50 border-b border-gray-200">
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-5 w-5" />
-        <Skeleton className="h-6 w-40" />
+const ContentSkeleton = () => (
+  <div className="space-y-6">
+    <div className="bg-white rounded-lg border border-gray-200">
+      <div className="p-6 border-b border-gray-200 bg-gray-50">
+        <Skeleton className="h-6 w-48 mb-2" />
+        <Skeleton className="h-4 w-96" />
       </div>
-      <Skeleton className="h-4 w-80" />
-    </CardHeader>
-    <CardContent className="p-6">
-      <div className="space-y-8">
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-center">
-            <Skeleton className="h-5 w-5 mr-2 rounded" />
-            <Skeleton className="h-4 w-96" />
-          </div>
-        </div>
-        {/* Multiple payment gateway skeletons */}
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="space-y-4">
-            <div className="flex items-center gap-3 pb-2">
-              <Skeleton className="h-5 w-5" />
-              <Skeleton className="h-5 w-48" />
+      <div className="p-6 space-y-6">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-10 w-full" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-10 w-full" />
-              </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full" />
             </div>
-            {index < 3 && <Separator />}
           </div>
         ))}
         <div className="flex justify-end pt-4">
           <Skeleton className="h-10 w-32" />
         </div>
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </div>
 )
 
-const LoadingSkeleton = ({ activeTab }: { activeTab: string }) => {
-  const renderContentSkeleton = () => {
-    switch (activeTab) {
-      case "payment":
-        return <PaymentSettingsSkeleton />
-      default:
-        return <PaymentSettingsSkeleton />
-    }
-  }
-
-  return (
-    <AdminLayout>
-      <div className="min-h-screen bg-gray-50">
-        <HeaderSkeleton />
-        <div className="flex">
-          <SidebarSkeleton />
-          <div className="flex-1 p-6">{renderContentSkeleton()}</div>
+const LoadingSkeleton = ({ activeTab }: { activeTab: string }) => (
+  <AdminLayout>
+    <div className="min-h-screen bg-gray-50">
+      <HeaderSkeleton />
+      <div className="flex">
+        <SidebarSkeleton />
+        <div className="flex-1 p-6">
+          <ContentSkeleton />
         </div>
       </div>
-    </AdminLayout>
-  )
-}
+    </div>
+  </AdminLayout>
+)
 
-export default function SettingsPageWithPhonePe() {
+export default function CombinedSettingsPage() {
   const [activeTab, setActiveTab] = useState("general")
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null)
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
@@ -261,6 +268,7 @@ export default function SettingsPageWithPhonePe() {
     freeShippingAbove: 0,
     availabilityArea: [],
   })
+
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState({
     general: false,
@@ -272,74 +280,143 @@ export default function SettingsPageWithPhonePe() {
 
   const { toast } = useToast()
 
-  useEffect(() => {
-    fetchAllSettings()
-  }, [])
+  const API_BASE = "https://api.yespstudio.com/api/admin"
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token")
+    if (!token) {
+      throw new Error("No authentication token found")
+    }
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
+  const fetchStoreInfo = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/store-info`, {
+        headers: getAuthHeaders(),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStoreInfo(data)
+
+        // Update settings from store data
+        setGeneralSettings((prev) => ({
+          ...prev,
+          storeName: data.storeName || "",
+          logo: data.logo || "",
+          banner: data.banner || "",
+          tagline: data.general?.tagline || "",
+          supportEmail: data.general?.supportEmail || data.owner?.email || "",
+          supportPhone: data.general?.supportPhone || data.owner?.phone || "",
+        }))
+
+        setSocialSettings((prev) => ({
+          ...prev,
+          instagram: data.social?.instagram || "",
+          whatsapp: data.social?.whatsapp || data.owner?.phone || "",
+          facebook: data.social?.facebook || "",
+        }))
+
+        setShippingSettings((prev) => ({
+          ...prev,
+          deliveryTime: data.shipping?.deliveryTime || "2-3 business days",
+          charges: data.shipping?.charges || 0,
+          freeShippingAbove: data.shipping?.freeShippingAbove || 0,
+          availabilityArea: data.shipping?.availabilityArea || [],
+        }))
+      }
+    } catch (error) {
+      console.error("Error fetching store info:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load store information",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchSettings = async (section: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/settings/${section}`, {
+        headers: getAuthHeaders(),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+
+        switch (section) {
+          case "general":
+            setGeneralSettings((prev) => ({ ...prev, ...data }))
+            break
+          case "social":
+            setSocialSettings((prev) => ({ ...prev, ...data }))
+            break
+          case "payment":
+            setPaymentSettings((prev) => ({ ...prev, ...data }))
+            break
+          case "shipping":
+            setShippingSettings((prev) => ({ ...prev, ...data }))
+            break
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching ${section} settings:`, error)
+    }
+  }
+
+  const updateSettings = async (section: string, data: any) => {
+    const sectionKey = section as keyof typeof isSubmitting
+    setIsSubmitting((prev) => ({ ...prev, [sectionKey]: true }))
+
+    try {
+      const response = await fetch(`${API_BASE}/settings/${section}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      })
+
+      if (response.ok) {
+        setLastSaved((prev) => ({ ...prev, [section]: new Date() }))
+        toast({
+          title: "Settings updated",
+          description: `${section.charAt(0).toUpperCase() + section.slice(1)} settings have been updated successfully.`,
+        })
+        return true
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to update settings",
+          variant: "destructive",
+        })
+        return false
+      }
+    } catch (error) {
+      console.error(`Error updating ${section} settings:`, error)
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      })
+      return false
+    } finally {
+      setIsSubmitting((prev) => ({ ...prev, [sectionKey]: false }))
+    }
+  }
 
   const fetchAllSettings = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        toast({
-          title: "Authentication Error",
-          description: "Please login again",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Fetch complete store information
-      const storeResponse = await fetch("https://api.yespstudio.com/api/admin/store-info", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (storeResponse.ok) {
-        const storeData = await storeResponse.json()
-        console.log("Store data:", storeData)
-        setStoreInfo(storeData)
-
-        // Set general settings from store data
-        setGeneralSettings({
-          storeName: storeData.storeName || "",
-          logo: storeData.logo || "",
-          banner: storeData.banner || "",
-          tagline: storeData.general?.tagline || "",
-          supportEmail: storeData.general?.supportEmail || storeData.owner?.email || "",
-          supportPhone: storeData.general?.supportPhone || storeData.owner?.phone || "",
-        })
-
-        // Set social settings
-        setSocialSettings({
-          instagram: storeData.social?.instagram || "",
-          whatsapp: storeData.social?.whatsapp || storeData.owner?.phone || "",
-          facebook: storeData.social?.facebook || "",
-        })
-
-        // Set shipping settings
-        setShippingSettings({
-          deliveryTime: storeData.shipping?.deliveryTime || "2-3 business days",
-          charges: storeData.shipping?.charges || 0,
-          freeShippingAbove: storeData.shipping?.freeShippingAbove || 0,
-          availabilityArea: storeData.shipping?.availabilityArea || [],
-        })
-      } else {
-        console.error("Failed to fetch store data")
-        toast({
-          title: "Error",
-          description: "Failed to load store settings",
-          variant: "destructive",
-        })
-      }
-
-      // Fetch individual settings sections
+      await fetchStoreInfo()
       await Promise.all([
-        fetchGeneralSettings(),
-        fetchSocialSettings(),
-        fetchPaymentSettings(),
-        fetchShippingSettings(),
+        fetchSettings("general"),
+        fetchSettings("social"),
+        fetchSettings("payment"),
+        fetchSettings("shipping"),
       ])
     } catch (error) {
       console.error("Error fetching settings:", error)
@@ -353,253 +430,9 @@ export default function SettingsPageWithPhonePe() {
     }
   }
 
-  const fetchGeneralSettings = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/general", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setGeneralSettings((prev) => ({
-          ...prev,
-          ...data,
-        }))
-      }
-    } catch (error) {
-      console.error("Error fetching general settings:", error)
-    }
-  }
-
-  const fetchSocialSettings = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/social", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setSocialSettings((prev) => ({
-          ...prev,
-          ...data,
-        }))
-      }
-    } catch (error) {
-      console.error("Error fetching social settings:", error)
-    }
-  }
-
-  const fetchPaymentSettings = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/payment", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setPaymentSettings((prev) => ({
-          ...prev,
-          ...data,
-        }))
-      }
-    } catch (error) {
-      console.error("Error fetching payment settings:", error)
-    }
-  }
-
-  const fetchShippingSettings = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/shipping", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setShippingSettings((prev) => ({
-          ...prev,
-          ...data,
-        }))
-      }
-    } catch (error) {
-      console.error("Error fetching shipping settings:", error)
-    }
-  }
-
-  const updateGeneralSettings = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting((prev) => ({ ...prev, general: true }))
-
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/general", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(generalSettings),
-      })
-
-      if (response.ok) {
-        setLastSaved((prev) => ({ ...prev, general: new Date() }))
-        toast({
-          title: "Settings updated",
-          description: "General settings have been updated successfully.",
-        })
-        fetchAllSettings()
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.error || "Failed to update settings",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error updating general settings:", error)
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting((prev) => ({ ...prev, general: false }))
-    }
-  }
-
-  const updateSocialSettings = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting((prev) => ({ ...prev, social: true }))
-
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/social", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(socialSettings),
-      })
-
-      if (response.ok) {
-        setLastSaved((prev) => ({ ...prev, social: new Date() }))
-        toast({
-          title: "Settings updated",
-          description: "Social media settings have been updated successfully.",
-        })
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.error || "Failed to update settings",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error updating social settings:", error)
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting((prev) => ({ ...prev, social: false }))
-    }
-  }
-
-  const updatePaymentSettings = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting((prev) => ({ ...prev, payment: true }))
-
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/payment", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(paymentSettings),
-      })
-
-      if (response.ok) {
-        setLastSaved((prev) => ({ ...prev, payment: new Date() }))
-        toast({
-          title: "Settings updated",
-          description: "Payment settings have been updated successfully.",
-        })
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.error || "Failed to update settings",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error updating payment settings:", error)
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting((prev) => ({ ...prev, payment: false }))
-    }
-  }
-
-  const updateShippingSettings = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting((prev) => ({ ...prev, shipping: true }))
-
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch("https://api.yespstudio.com/api/admin/settings/shipping", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...shippingSettings,
-          availabilityArea: shippingSettings.availabilityArea.filter((area) => area.trim() !== ""),
-        }),
-      })
-
-      if (response.ok) {
-        setLastSaved((prev) => ({ ...prev, shipping: new Date() }))
-        toast({
-          title: "Settings updated",
-          description: "Shipping settings have been updated successfully.",
-        })
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.error || "Failed to update settings",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error updating shipping settings:", error)
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting((prev) => ({ ...prev, shipping: false }))
-    }
-  }
+  useEffect(() => {
+    fetchAllSettings()
+  }, [])
 
   const handleGeneralChange = (field: keyof GeneralSettings, value: string) => {
     setGeneralSettings((prev) => ({
@@ -629,6 +462,29 @@ export default function SettingsPageWithPhonePe() {
     }))
   }
 
+  const updateGeneralSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await updateSettings("general", generalSettings)
+  }
+
+  const updateSocialSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await updateSettings("social", socialSettings)
+  }
+
+  const updatePaymentSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await updateSettings("payment", paymentSettings)
+  }
+
+  const updateShippingSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await updateSettings("shipping", {
+      ...shippingSettings,
+      availabilityArea: shippingSettings.availabilityArea.filter((area) => area.trim() !== ""),
+    })
+  }
+
   if (loading) {
     return <LoadingSkeleton activeTab={activeTab} />
   }
@@ -641,6 +497,7 @@ export default function SettingsPageWithPhonePe() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
             <p className="text-gray-600 text-sm mt-1">Manage your store configuration and preferences</p>
+
             {/* Store Info Banner */}
             {storeInfo && (
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -857,7 +714,6 @@ export default function SettingsPageWithPhonePe() {
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="whatsapp" className="text-sm font-semibold text-gray-700">
                         WhatsApp Number
@@ -871,7 +727,6 @@ export default function SettingsPageWithPhonePe() {
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="facebook" className="text-sm font-semibold text-gray-700">
                         Facebook URL
@@ -885,7 +740,6 @@ export default function SettingsPageWithPhonePe() {
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
-
                     <div className="flex justify-end pt-4">
                       <Button
                         type="submit"
@@ -901,7 +755,7 @@ export default function SettingsPageWithPhonePe() {
               </Card>
             )}
 
-            {/* Payment Settings with PhonePe */}
+            {/* Payment Settings */}
             {activeTab === "payment" && (
               <Card className="shadow-sm border-gray-200">
                 <CardHeader className="bg-gray-50 border-b border-gray-200">
@@ -1226,7 +1080,6 @@ export default function SettingsPageWithPhonePe() {
                         className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label htmlFor="charges" className="text-sm font-semibold text-gray-700">
@@ -1261,7 +1114,6 @@ export default function SettingsPageWithPhonePe() {
                         />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="availabilityArea" className="text-sm font-semibold text-gray-700">
                         Availability Areas
@@ -1281,7 +1133,6 @@ export default function SettingsPageWithPhonePe() {
                       />
                       <p className="text-xs text-gray-500">Enter areas separated by commas</p>
                     </div>
-
                     <div className="flex justify-end pt-4">
                       <Button
                         type="submit"
