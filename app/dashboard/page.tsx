@@ -26,6 +26,8 @@ import {
   ExternalLink,
   RefreshCw,
   Activity,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react"
 
 interface DashboardData {
@@ -75,6 +77,12 @@ interface StoreInfo {
   }
 }
 
+interface ApiStatus {
+  dashboard: "loading" | "success" | "error"
+  analytics: "loading" | "success" | "error"
+  storeInfo: "loading" | "success" | "error"
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
@@ -83,6 +91,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [apiStatus, setApiStatus] = useState<ApiStatus>({
+    dashboard: "loading",
+    analytics: "loading",
+    storeInfo: "loading",
+  })
 
   useEffect(() => {
     fetchAllData()
@@ -91,10 +104,15 @@ export default function DashboardPage() {
   const fetchAllData = async () => {
     setLoading(true)
     setError(null)
+    setApiStatus({
+      dashboard: "loading",
+      analytics: "loading",
+      storeInfo: "loading",
+    })
+
     try {
-      await Promise.all([fetchDashboardData(), fetchAnalyticsData(), fetchStoreInfo()])
+      await Promise.allSettled([fetchDashboardData(), fetchAnalyticsData(), fetchStoreInfo()])
     } catch (err) {
-      setError("Failed to load dashboard data")
       console.error("Error fetching dashboard data:", err)
     } finally {
       setLoading(false)
@@ -109,12 +127,15 @@ export default function DashboardPage() {
         return
       }
 
+      console.log("🔄 Fetching dashboard stats...")
       const response = await fetch("https://api.yespstudio.com/api/admin/dashboard/stats", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       })
+
+      console.log("📡 Dashboard stats response:", response.status)
 
       if (response.status === 401) {
         localStorage.removeItem("token")
@@ -124,19 +145,46 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log("✅ Dashboard data received:", data)
         setDashboardData(data)
+        setApiStatus((prev) => ({ ...prev, dashboard: "success" }))
       } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        console.warn("❌ Dashboard stats failed:", response.status)
+        // Set fallback data for dashboard
+        setDashboardData({
+          totalOrders: 0,
+          totalRevenue: 0,
+          totalProducts: 0,
+          totalCustomers: 0,
+          pendingOrders: 0,
+          lastOrder: "",
+          storeInfo: { name: "", storeId: "", isActive: false },
+          user: { name: "Admin", email: "", role: "admin" },
+        })
+        setApiStatus((prev) => ({ ...prev, dashboard: "error" }))
       }
     } catch (error) {
-      console.error("Error fetching dashboard data:", error)
-      throw error
+      console.error("💥 Error fetching dashboard data:", error)
+      setApiStatus((prev) => ({ ...prev, dashboard: "error" }))
+      // Set fallback data
+      setDashboardData({
+        totalOrders: 0,
+        totalRevenue: 0,
+        totalProducts: 0,
+        totalCustomers: 0,
+        pendingOrders: 0,
+        lastOrder: "",
+        storeInfo: { name: "", storeId: "", isActive: false },
+        user: { name: "Admin", email: "", role: "admin" },
+      })
     }
   }
 
   const fetchAnalyticsData = async () => {
     try {
       const token = localStorage.getItem("token")
+      console.log("🔄 Fetching analytics data...")
+
       const response = await fetch("https://api.yespstudio.com/api/admin/dashboard/analytics", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -144,20 +192,37 @@ export default function DashboardPage() {
         },
       })
 
+      console.log("📡 Analytics response:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("✅ Analytics data received:", data)
         setAnalyticsData(data)
+        setApiStatus((prev) => ({ ...prev, analytics: "success" }))
       } else {
-        console.warn("Analytics data not available")
+        console.warn("❌ Analytics failed:", response.status)
+        setApiStatus((prev) => ({ ...prev, analytics: "error" }))
+        // Set empty analytics data
+        setAnalyticsData({
+          monthlyRevenue: [],
+          topProducts: [],
+        })
       }
     } catch (error) {
-      console.error("Error fetching analytics data:", error)
+      console.error("💥 Error fetching analytics data:", error)
+      setApiStatus((prev) => ({ ...prev, analytics: "error" }))
+      setAnalyticsData({
+        monthlyRevenue: [],
+        topProducts: [],
+      })
     }
   }
 
   const fetchStoreInfo = async () => {
     try {
       const token = localStorage.getItem("token")
+      console.log("🔄 Fetching store info...")
+
       const response = await fetch("https://api.yespstudio.com/api/admin/store-info", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -165,12 +230,20 @@ export default function DashboardPage() {
         },
       })
 
+      console.log("📡 Store info response:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("✅ Store info received:", data)
         setStoreInfo(data)
+        setApiStatus((prev) => ({ ...prev, storeInfo: "success" }))
+      } else {
+        console.warn("❌ Store info failed:", response.status)
+        setApiStatus((prev) => ({ ...prev, storeInfo: "error" }))
       }
     } catch (error) {
-      console.error("Error fetching store info:", error)
+      console.error("💥 Error fetching store info:", error)
+      setApiStatus((prev) => ({ ...prev, storeInfo: "error" }))
     }
   }
 
@@ -198,35 +271,35 @@ export default function DashboardPage() {
       description: "Create a new product",
       icon: Plus,
       color: "bg-slate-50 text-slate-600",
-      href: "/products",
+      href: "/admin/products",
     },
     {
       title: "View Orders",
       description: "Manage customer orders",
       icon: ShoppingCart,
       color: "bg-green-50 text-green-600",
-      href: "/orders",
+      href: "/admin/orders",
     },
     {
       title: "Manage Categories",
       description: "Organize your products",
       icon: Tag,
       color: "bg-slate-50 text-slate-600",
-      href: "/categories",
+      href: "/admin/categories",
     },
     {
       title: "Create Offer",
       description: "Add promotional offers",
       icon: Percent,
       color: "bg-green-50 text-green-600",
-      href: "/offers",
+      href: "/admin/offers",
     },
     {
       title: "Store Settings",
       description: "Configure your store",
       icon: Settings,
       color: "bg-slate-50 text-slate-600",
-      href: "/settings",
+      href: "/admin/settings",
     },
     {
       title: "View Storefront",
@@ -238,7 +311,8 @@ export default function DashboardPage() {
     },
   ]
 
-  if (loading) {
+  // Show loading state only if all APIs are still loading
+  if (loading && Object.values(apiStatus).every((status) => status === "loading")) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-96">
@@ -246,25 +320,6 @@ export default function DashboardPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-slate-800"></div>
             <p className="text-slate-600 text-sm">Loading dashboard...</p>
           </div>
-        </div>
-      </AdminLayout>
-    )
-  }
-
-  if (error) {
-    return (
-      <AdminLayout>
-        <div className="p-6">
-          <Alert className="border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              {error}
-              <Button variant="outline" size="sm" onClick={handleRefresh} className="ml-4 bg-white border-slate-300">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
         </div>
       </AdminLayout>
     )
@@ -278,7 +333,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
             <p className="text-slate-600 text-sm mt-1">
-              Welcome back, <span className="font-semibold text-slate-900">{dashboardData?.user.name}</span>
+              Welcome back, <span className="font-semibold text-slate-900">{dashboardData?.user.name || "Admin"}</span>
             </p>
             {storeInfo && (
               <div className="flex items-center mt-3 space-x-3">
@@ -317,7 +372,38 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Alert Section */}
+        {/* API Status Alerts */}
+        {Object.values(apiStatus).some((status) => status === "error") && (
+          <Alert className="border-yellow-200 bg-yellow-50">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertDescription className="text-yellow-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-sm">Some dashboard features are temporarily unavailable</p>
+                  <div className="text-xs text-yellow-700 mt-1 space-y-1">
+                    {apiStatus.dashboard === "error" && <div>• Dashboard statistics service is down</div>}
+                    {apiStatus.analytics === "error" && <div>• Analytics service is down</div>}
+                    {apiStatus.storeInfo === "error" && <div>• Store information service is down</div>}
+                  </div>
+                  <p className="text-xs text-yellow-700 mt-2">
+                    The backend team has been notified. Showing available data.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-yellow-300 text-yellow-700 hover:bg-yellow-100 text-xs bg-white"
+                  onClick={handleRefresh}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Retry
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Pending Orders Alert */}
         {dashboardData?.pendingOrders > 0 && (
           <Alert className="border-green-200 bg-green-50">
             <AlertCircle className="h-4 w-4 text-green-600" />
@@ -333,7 +419,7 @@ export default function DashboardPage() {
                   variant="outline"
                   size="sm"
                   className="border-green-300 text-green-700 hover:bg-green-100 text-xs bg-white"
-                  onClick={() => router.push("/orders")}
+                  onClick={() => router.push("/admin/orders")}
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   View Orders
@@ -346,13 +432,16 @@ export default function DashboardPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card
-            className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white"
-            onClick={() => router.push("/orders")}
+            className={`border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white ${apiStatus.dashboard === "error" ? "opacity-75" : ""}`}
+            onClick={() => router.push("/admin/orders")}
           >
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium">Total Orders</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-slate-600 text-sm font-medium">Total Orders</p>
+                    {apiStatus.dashboard === "error" && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                  </div>
                   <p className="text-2xl font-bold mt-2 text-slate-900">{dashboardData?.totalOrders || 0}</p>
                   <p className="text-slate-500 text-xs mt-1">{dashboardData?.pendingOrders || 0} pending</p>
                 </div>
@@ -363,11 +452,16 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 bg-white">
+          <Card
+            className={`border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 bg-white ${apiStatus.dashboard === "error" ? "opacity-75" : ""}`}
+          >
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium">Total Revenue</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-slate-600 text-sm font-medium">Total Revenue</p>
+                    {apiStatus.dashboard === "error" && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                  </div>
                   <p className="text-2xl font-bold mt-2 text-slate-900">
                     {formatCurrency(dashboardData?.totalRevenue || 0)}
                   </p>
@@ -384,13 +478,16 @@ export default function DashboardPage() {
           </Card>
 
           <Card
-            className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white"
-            onClick={() => router.push("/products")}
+            className={`border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white ${apiStatus.dashboard === "error" ? "opacity-75" : ""}`}
+            onClick={() => router.push("/admin/products")}
           >
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium">Total Products</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-slate-600 text-sm font-medium">Total Products</p>
+                    {apiStatus.dashboard === "error" && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                  </div>
                   <p className="text-2xl font-bold mt-2 text-slate-900">{dashboardData?.totalProducts || 0}</p>
                   <p className="text-slate-500 text-xs mt-1">Active products</p>
                 </div>
@@ -402,13 +499,16 @@ export default function DashboardPage() {
           </Card>
 
           <Card
-            className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white"
-            onClick={() => router.push("/customers")}
+            className={`border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer bg-white ${apiStatus.dashboard === "error" ? "opacity-75" : ""}`}
+            onClick={() => router.push("/admin/customers")}
           >
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-600 text-sm font-medium">Total Customers</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-slate-600 text-sm font-medium">Total Customers</p>
+                    {apiStatus.dashboard === "error" && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                  </div>
                   <p className="text-2xl font-bold mt-2 text-slate-900">{dashboardData?.totalCustomers || 0}</p>
                   <p className="text-slate-500 text-xs mt-1">Registered customers</p>
                 </div>
@@ -420,14 +520,66 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Quick Actions */}
+        <Card className="border border-gray-200 shadow-sm bg-white">
+          <CardHeader className="border-b border-gray-100 bg-white pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold text-slate-900">Quick Actions</CardTitle>
+                <CardDescription className="text-slate-600 text-sm mt-1">Common tasks and shortcuts</CardDescription>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg">
+                <Activity className="h-5 w-5 text-slate-600" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {quickActions.map((action, index) => {
+                const Icon = action.icon
+                return (
+                  <Card
+                    key={index}
+                    className="border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer bg-white"
+                    onClick={() => {
+                      if (action.external) {
+                        window.open(action.href, "_blank")
+                      } else {
+                        router.push(action.href)
+                      }
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2 rounded-lg ${action.color}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">{action.title}</p>
+                          <p className="text-xs text-slate-500">{action.description}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Analytics Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Monthly Revenue */}
-          <Card className="border border-gray-200 shadow-sm bg-white">
+          <Card
+            className={`border border-gray-200 shadow-sm bg-white ${apiStatus.analytics === "error" ? "opacity-75" : ""}`}
+          >
             <CardHeader className="border-b border-gray-100 bg-white pb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl font-bold text-slate-900">Monthly Revenue</CardTitle>
+                  <div className="flex items-center space-x-2">
+                    <CardTitle className="text-xl font-bold text-slate-900">Monthly Revenue</CardTitle>
+                    {apiStatus.analytics === "error" && <AlertTriangle className="h-4 w-4 text-yellow-500" />}
+                  </div>
                   <CardDescription className="text-slate-600 text-sm mt-1">
                     Revenue trends over the months
                   </CardDescription>
@@ -438,7 +590,7 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              {analyticsData?.monthlyRevenue.length > 0 ? (
+              {analyticsData?.monthlyRevenue && analyticsData.monthlyRevenue.length > 0 ? (
                 <div className="space-y-4">
                   {analyticsData.monthlyRevenue.slice(-6).map((month, index) => (
                     <div
@@ -471,19 +623,30 @@ export default function DashboardPage() {
                       <Calendar className="h-8 w-8 text-slate-400" />
                     </div>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800 mb-2">No revenue data</h3>
-                  <p className="text-xs text-slate-500">Revenue analytics will appear here</p>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-2">
+                    {apiStatus.analytics === "error" ? "Analytics temporarily unavailable" : "No revenue data"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {apiStatus.analytics === "error"
+                      ? "Revenue analytics will be restored shortly"
+                      : "Revenue analytics will appear here"}
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
           {/* Top Products */}
-          <Card className="border border-gray-200 shadow-sm bg-white">
+          <Card
+            className={`border border-gray-200 shadow-sm bg-white ${apiStatus.analytics === "error" ? "opacity-75" : ""}`}
+          >
             <CardHeader className="border-b border-gray-100 bg-white pb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl font-bold text-slate-900">Top Products</CardTitle>
+                  <div className="flex items-center space-x-2">
+                    <CardTitle className="text-xl font-bold text-slate-900">Top Products</CardTitle>
+                    {apiStatus.analytics === "error" && <AlertTriangle className="h-4 w-4 text-yellow-500" />}
+                  </div>
                   <CardDescription className="text-slate-600 text-sm mt-1">Best performing products</CardDescription>
                 </div>
                 <div className="p-2 bg-slate-50 rounded-lg">
@@ -492,7 +655,7 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              {analyticsData?.topProducts.length > 0 ? (
+              {analyticsData?.topProducts && analyticsData.topProducts.length > 0 ? (
                 <div className="space-y-4">
                   {analyticsData.topProducts.map((product, index) => (
                     <div
@@ -525,8 +688,14 @@ export default function DashboardPage() {
                       <Package className="h-8 w-8 text-slate-400" />
                     </div>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800 mb-2">No product data</h3>
-                  <p className="text-xs text-slate-500">Top products will appear here</p>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-2">
+                    {apiStatus.analytics === "error" ? "Product analytics temporarily unavailable" : "No product data"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {apiStatus.analytics === "error"
+                      ? "Product analytics will be restored shortly"
+                      : "Top products will appear here"}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -535,11 +704,16 @@ export default function DashboardPage() {
 
         {/* Store Status */}
         {storeInfo && (
-          <Card className="border border-gray-200 shadow-sm bg-white">
+          <Card
+            className={`border border-gray-200 shadow-sm bg-white ${apiStatus.storeInfo === "error" ? "opacity-75" : ""}`}
+          >
             <CardHeader className="border-b border-gray-100 bg-white pb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl font-bold text-slate-900">Store Status</CardTitle>
+                  <div className="flex items-center space-x-2">
+                    <CardTitle className="text-xl font-bold text-slate-900">Store Status</CardTitle>
+                    {apiStatus.storeInfo === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                  </div>
                   <CardDescription className="text-slate-600 text-sm mt-1">
                     Your store information and quick links
                   </CardDescription>
