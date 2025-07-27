@@ -962,7 +962,7 @@ export default function ProductsPage() {
       // Log what will be sent in FormData
       console.log("🔍 What will be sent to backend:")
       console.log("  hasVariants field:", formData.hasVariants.toString())
-      console.log("  variants field:", formData.hasVariants ? JSON.stringify(cleanedVariants) : JSON.stringify([]))
+      console.log("  variants field will be processed below...")
 
       // Add all form fields with better validation
       Object.entries(formData).forEach(([key, value]) => {
