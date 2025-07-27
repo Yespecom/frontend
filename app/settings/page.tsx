@@ -73,6 +73,7 @@ interface PaymentSettings {
   razorpayEnabled: boolean
   stripeEnabled: boolean
   phonePeEnabled: boolean
+  onlinePaymentEnabled?: boolean
   paypalEnabled?: boolean
   paypalClientId?: string
   paypalClientSecret?: string
@@ -110,6 +111,7 @@ interface StoreInfo {
   general: any
   social: any
   shipping: any
+  payment: any
   tenantId: string
 }
 
@@ -261,6 +263,7 @@ export default function CombinedSettingsPage() {
     razorpayEnabled: false,
     stripeEnabled: false,
     phonePeEnabled: false,
+    onlinePaymentEnabled: false,
   })
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({
     deliveryTime: "",
@@ -293,16 +296,19 @@ export default function CombinedSettingsPage() {
     }
   }
 
-  // Update the fetchSettings function to handle payment and shipping data properly
+  // Fixed fetchSettings function with better error handling and data mapping
   const fetchSettings = async (section: string) => {
     try {
+      console.log(`🔄 Fetching ${section} settings...`)
       const response = await fetch(`${API_BASE}/settings/${section}`, {
         headers: getAuthHeaders(),
       })
 
+      console.log(`📡 ${section} response status:`, response.status)
+
       if (response.ok) {
         const data = await response.json()
-        console.log(`Fetched ${section} settings:`, data) // Debug log
+        console.log(`✅ Fetched ${section} settings:`, data)
 
         switch (section) {
           case "general":
@@ -312,27 +318,58 @@ export default function CombinedSettingsPage() {
             setSocialSettings((prev) => ({ ...prev, ...data }))
             break
           case "payment":
-            // Handle payment settings with proper mapping
-            setPaymentSettings((prev) => ({
-              ...prev,
-              razorpayKeyId: data.razorpay?.keyId || data.razorpayKeyId || "",
-              razorpayKeySecret: data.razorpay?.keySecret || data.razorpayKeySecret || "",
-              razorpayEnabled: data.razorpay?.enabled || data.razorpayEnabled || false,
-              stripePublicKey: data.stripe?.publishableKey || data.stripePublicKey || "",
-              stripeSecretKey: data.stripe?.secretKey || data.stripeSecretKey || "",
-              stripeEnabled: data.stripe?.enabled || data.stripeEnabled || false,
-              phonePeMerchantId: data.phonepe?.merchantId || data.phonePeMerchantId || "",
-              phonePeSaltKey: data.phonepe?.saltKey || data.phonePeSaltKey || "",
-              phonePeSaltIndex: data.phonepe?.saltIndex || data.phonePeSaltIndex || "",
-              phonePeEnvironment: data.phonepe?.environment || data.phonePeEnvironment || "sandbox",
-              phonePeWebhookUrl: data.phonepe?.webhookUrl || data.phonePeWebhookUrl || "",
-              phonePeEnabled: data.phonepe?.enabled || data.phonePeEnabled || false,
+            // Handle payment settings with comprehensive mapping
+            const paymentData = {
+              // Handle flat structure (direct properties)
+              razorpayKeyId: data.razorpayKeyId || "",
+              razorpayKeySecret: data.razorpayKeySecret || "",
+              razorpayEnabled: data.razorpayEnabled || false,
+
+              stripePublicKey: data.stripePublicKey || "",
+              stripeSecretKey: data.stripeSecretKey || "",
+              stripeEnabled: data.stripeEnabled || false,
+
+              phonePeMerchantId: data.phonePeMerchantId || "",
+              phonePeSaltKey: data.phonePeSaltKey || "",
+              phonePeSaltIndex: data.phonePeSaltIndex || "",
+              phonePeEnvironment: data.phonePeEnvironment || "sandbox",
+              phonePeWebhookUrl: data.phonePeWebhookUrl || "",
+              phonePeEnabled: data.phonePeEnabled || false,
+
               codEnabled: data.codEnabled !== undefined ? data.codEnabled : true,
               onlinePaymentEnabled: data.onlinePaymentEnabled !== undefined ? data.onlinePaymentEnabled : false,
-            }))
+            }
+
+            // Handle nested structure (if exists)
+            if (data.razorpay) {
+              paymentData.razorpayKeyId = data.razorpay.keyId || paymentData.razorpayKeyId
+              paymentData.razorpayKeySecret = data.razorpay.keySecret || paymentData.razorpayKeySecret
+              paymentData.razorpayEnabled =
+                data.razorpay.enabled !== undefined ? data.razorpay.enabled : paymentData.razorpayEnabled
+            }
+
+            if (data.stripe) {
+              paymentData.stripePublicKey = data.stripe.publishableKey || paymentData.stripePublicKey
+              paymentData.stripeSecretKey = data.stripe.secretKey || paymentData.stripeSecretKey
+              paymentData.stripeEnabled =
+                data.stripe.enabled !== undefined ? data.stripe.enabled : paymentData.stripeEnabled
+            }
+
+            if (data.phonepe) {
+              paymentData.phonePeMerchantId = data.phonepe.merchantId || paymentData.phonePeMerchantId
+              paymentData.phonePeSaltKey = data.phonepe.saltKey || paymentData.phonePeSaltKey
+              paymentData.phonePeSaltIndex = data.phonepe.saltIndex || paymentData.phonePeSaltIndex
+              paymentData.phonePeEnvironment = data.phonepe.environment || paymentData.phonePeEnvironment
+              paymentData.phonePeWebhookUrl = data.phonepe.webhookUrl || paymentData.phonePeWebhookUrl
+              paymentData.phonePeEnabled =
+                data.phonepe.enabled !== undefined ? data.phonepe.enabled : paymentData.phonePeEnabled
+            }
+
+            console.log(`🔧 Processed payment data:`, paymentData)
+            setPaymentSettings((prev) => ({ ...prev, ...paymentData }))
             break
+
           case "shipping":
-            // Handle shipping settings with proper mapping
             setShippingSettings((prev) => ({
               ...prev,
               deliveryTime: data.deliveryTime || "2-3 business days",
@@ -345,26 +382,60 @@ export default function CombinedSettingsPage() {
             break
         }
       } else {
-        console.error(`Failed to fetch ${section} settings:`, response.status)
+        const errorText = await response.text()
+        console.error(`❌ Failed to fetch ${section} settings:`, response.status, errorText)
+
+        // Show user-friendly error
+        toast({
+          title: "Fetch Error",
+          description: `Failed to load ${section} settings. Please try again.`,
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error(`Error fetching ${section} settings:`, error)
+      console.error(`💥 Error fetching ${section} settings:`, error)
+      toast({
+        title: "Network Error",
+        description: `Unable to fetch ${section} settings. Check your connection.`,
+        variant: "destructive",
+      })
     }
   }
 
-  // Update the updateSettings function to handle proper data structure
+  // Fixed updateSettings function with proper data structure
   const updateSettings = async (section: string, data: any) => {
     const sectionKey = section as keyof typeof isSubmitting
     setIsSubmitting((prev) => ({ ...prev, [sectionKey]: true }))
 
     try {
-      let requestData = data
+      let requestData = { ...data }
 
-      // Transform payment data to match backend structure
+      // For payment settings, send both flat and nested structure for maximum compatibility
       if (section === "payment") {
         requestData = {
+          // Flat structure (for backward compatibility)
           codEnabled: data.codEnabled,
           onlinePaymentEnabled: data.razorpayEnabled || data.stripeEnabled || data.phonePeEnabled,
+
+          // Razorpay
+          razorpayEnabled: data.razorpayEnabled,
+          razorpayKeyId: data.razorpayKeyId,
+          razorpayKeySecret: data.razorpayKeySecret,
+
+          // Stripe
+          stripeEnabled: data.stripeEnabled,
+          stripePublicKey: data.stripePublicKey,
+          stripeSecretKey: data.stripeSecretKey,
+
+          // PhonePe
+          phonePeEnabled: data.phonePeEnabled,
+          phonePeMerchantId: data.phonePeMerchantId,
+          phonePeSaltKey: data.phonePeSaltKey,
+          phonePeSaltIndex: data.phonePeSaltIndex,
+          phonePeEnvironment: data.phonePeEnvironment,
+          phonePeWebhookUrl: data.phonePeWebhookUrl,
+
+          // Nested structure (for new backend)
           razorpay: {
             enabled: data.razorpayEnabled,
             keyId: data.razorpayKeyId,
@@ -383,23 +454,9 @@ export default function CombinedSettingsPage() {
             environment: data.phonePeEnvironment,
             webhookUrl: data.phonePeWebhookUrl,
           },
-          // Also send flat structure for backward compatibility
-          razorpayEnabled: data.razorpayEnabled,
-          razorpayKeyId: data.razorpayKeyId,
-          razorpayKeySecret: data.razorpayKeySecret,
-          stripeEnabled: data.stripeEnabled,
-          stripePublicKey: data.stripePublicKey,
-          stripeSecretKey: data.stripeSecretKey,
-          phonePeEnabled: data.phonePeEnabled,
-          phonePeMerchantId: data.phonePeMerchantId,
-          phonePeSaltKey: data.phonePeSaltKey,
-          phonePeSaltIndex: data.phonePeSaltIndex,
-          phonePeEnvironment: data.phonePeEnvironment,
-          phonePeWebhookUrl: data.phonePeWebhookUrl,
         }
       }
 
-      // Transform shipping data to match backend structure
       if (section === "shipping") {
         requestData = {
           ...data,
@@ -408,7 +465,7 @@ export default function CombinedSettingsPage() {
         }
       }
 
-      console.log(`Updating ${section} settings with data:`, requestData) // Debug log
+      console.log(`🚀 Updating ${section} settings with data:`, requestData)
 
       const response = await fetch(`${API_BASE}/settings/${section}`, {
         method: "PUT",
@@ -416,34 +473,40 @@ export default function CombinedSettingsPage() {
         body: JSON.stringify(requestData),
       })
 
+      console.log(`📡 ${section} update response status:`, response.status)
+
       if (response.ok) {
         const responseData = await response.json()
-        console.log(`${section} settings updated successfully:`, responseData) // Debug log
+        console.log(`✅ ${section} settings updated successfully:`, responseData)
 
         setLastSaved((prev) => ({ ...prev, [section]: new Date() }))
         toast({
-          title: "Settings updated",
-          description: `${section.charAt(0).toUpperCase() + section.slice(1)} settings have been updated successfully.`,
+          title: "Settings Updated",
+          description: `${section.charAt(0).toUpperCase() + section.slice(1)} settings have been saved successfully.`,
         })
 
         // Refresh the specific section data after successful update
-        await fetchSettings(section)
+        setTimeout(() => {
+          fetchSettings(section)
+        }, 500) // Small delay to ensure backend has processed the update
+
         return true
       } else {
-        const errorData = await response.json()
-        console.error(`Failed to update ${section} settings:`, errorData) // Debug log
+        const errorData = await response.json().catch(() => ({ error: "Unknown error occurred" }))
+        console.error(`❌ Failed to update ${section} settings:`, errorData)
+
         toast({
-          title: "Error",
-          description: errorData.error || "Failed to update settings",
+          title: "Update Failed",
+          description: errorData.error || `Failed to update ${section} settings. Please try again.`,
           variant: "destructive",
         })
         return false
       }
     } catch (error) {
-      console.error(`Error updating ${section} settings:`, error)
+      console.error(`💥 Error updating ${section} settings:`, error)
       toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
+        title: "Network Error",
+        description: "Unable to save settings. Please check your connection and try again.",
         variant: "destructive",
       })
       return false
@@ -452,19 +515,20 @@ export default function CombinedSettingsPage() {
     }
   }
 
-  // Update fetchStoreInfo to better handle payment and shipping data
+  // Enhanced fetchStoreInfo with better payment data handling
   const fetchStoreInfo = async () => {
     try {
+      console.log("🔄 Fetching store info...")
       const response = await fetch(`${API_BASE}/store-info`, {
         headers: getAuthHeaders(),
       })
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Store data received:", data) // Debug log
+        console.log("✅ Store data received:", data)
         setStoreInfo(data)
 
-        // Update settings from store data with better mapping
+        // Update general settings
         setGeneralSettings((prev) => ({
           ...prev,
           storeName: data.storeName || "",
@@ -480,6 +544,7 @@ export default function CombinedSettingsPage() {
           language: data.general?.language || "en",
         }))
 
+        // Update social settings
         setSocialSettings((prev) => ({
           ...prev,
           instagram: data.social?.instagram || "",
@@ -490,27 +555,36 @@ export default function CombinedSettingsPage() {
           telegram: data.social?.telegram || "",
         }))
 
-        // Handle payment settings from store data
+        // Update payment settings from store data if available
         if (data.payment) {
-          setPaymentSettings((prev) => ({
-            ...prev,
-            razorpayKeyId: data.payment.razorpay?.keyId || "",
-            razorpayKeySecret: data.payment.razorpay?.keySecret || "",
-            razorpayEnabled: data.payment.razorpay?.enabled || false,
-            stripePublicKey: data.payment.stripe?.publishableKey || "",
-            stripeSecretKey: data.payment.stripe?.secretKey || "",
-            stripeEnabled: data.payment.stripe?.enabled || false,
-            phonePeMerchantId: data.payment.phonepe?.merchantId || "",
-            phonePeSaltKey: data.payment.phonepe?.saltKey || "",
-            phonePeSaltIndex: data.payment.phonepe?.saltIndex || "",
-            phonePeEnvironment: data.payment.phonepe?.environment || "sandbox",
-            phonePeWebhookUrl: data.payment.phonepe?.webhookUrl || "",
-            phonePeEnabled: data.payment.phonepe?.enabled || false,
+          console.log("🔧 Processing payment data from store info:", data.payment)
+
+          const paymentData = {
+            razorpayKeyId: data.payment.razorpayKeyId || data.payment.razorpay?.keyId || "",
+            razorpayKeySecret: data.payment.razorpayKeySecret || data.payment.razorpay?.keySecret || "",
+            razorpayEnabled: data.payment.razorpayEnabled || data.payment.razorpay?.enabled || false,
+
+            stripePublicKey: data.payment.stripePublicKey || data.payment.stripe?.publishableKey || "",
+            stripeSecretKey: data.payment.stripeSecretKey || data.payment.stripe?.secretKey || "",
+            stripeEnabled: data.payment.stripeEnabled || data.payment.stripe?.enabled || false,
+
+            phonePeMerchantId: data.payment.phonePeMerchantId || data.payment.phonepe?.merchantId || "",
+            phonePeSaltKey: data.payment.phonePeSaltKey || data.payment.phonepe?.saltKey || "",
+            phonePeSaltIndex: data.payment.phonePeSaltIndex || data.payment.phonepe?.saltIndex || "",
+            phonePeEnvironment: data.payment.phonePeEnvironment || data.payment.phonepe?.environment || "sandbox",
+            phonePeWebhookUrl: data.payment.phonePeWebhookUrl || data.payment.phonepe?.webhookUrl || "",
+            phonePeEnabled: data.payment.phonePeEnabled || data.payment.phonepe?.enabled || false,
+
             codEnabled: data.payment.codEnabled !== undefined ? data.payment.codEnabled : true,
-          }))
+            onlinePaymentEnabled:
+              data.payment.onlinePaymentEnabled !== undefined ? data.payment.onlinePaymentEnabled : false,
+          }
+
+          console.log("🔧 Processed payment data from store:", paymentData)
+          setPaymentSettings((prev) => ({ ...prev, ...paymentData }))
         }
 
-        // Handle shipping settings from store data
+        // Update shipping settings
         if (data.shipping) {
           setShippingSettings((prev) => ({
             ...prev,
@@ -522,12 +596,19 @@ export default function CombinedSettingsPage() {
             zones: Array.isArray(data.shipping.zones) ? data.shipping.zones : [],
           }))
         }
+      } else {
+        console.error("❌ Failed to fetch store info:", response.status)
+        toast({
+          title: "Error",
+          description: "Failed to load store information",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error("Error fetching store info:", error)
+      console.error("💥 Error fetching store info:", error)
       toast({
-        title: "Error",
-        description: "Failed to load store information",
+        title: "Network Error",
+        description: "Unable to load store information. Please check your connection.",
         variant: "destructive",
       })
     }
@@ -537,17 +618,27 @@ export default function CombinedSettingsPage() {
     const fetchAllSettings = async () => {
       setLoading(true)
       try {
+        console.log("🚀 Starting to fetch all settings...")
+
+        // Fetch store info first
+        await fetchStoreInfo()
+
+        // Then fetch individual settings
         await Promise.all([
-          fetchStoreInfo(),
           fetchSettings("general"),
           fetchSettings("social"),
           fetchSettings("payment"),
           fetchSettings("shipping"),
         ])
+
+        console.log("✅ All settings fetched successfully")
+      } catch (error) {
+        console.error("💥 Error in fetchAllSettings:", error)
       } finally {
         setLoading(false)
       }
     }
+
     fetchAllSettings()
   }, [])
 
@@ -566,10 +657,15 @@ export default function CombinedSettingsPage() {
   }
 
   const handlePaymentChange = (field: keyof PaymentSettings, value: string | boolean) => {
-    setPaymentSettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+    console.log(`🔧 Payment field changed: ${field} = ${value}`)
+    setPaymentSettings((prev) => {
+      const updated = {
+        ...prev,
+        [field]: value,
+      }
+      console.log("🔧 Updated payment settings:", updated)
+      return updated
+    })
   }
 
   const handleShippingChange = (field: keyof ShippingSettings, value: string | number | string[]) => {
@@ -591,6 +687,7 @@ export default function CombinedSettingsPage() {
 
   const updatePaymentSettings = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log("🚀 Submitting payment settings:", paymentSettings)
     await updateSettings("payment", paymentSettings)
   }
 
@@ -885,6 +982,14 @@ export default function CombinedSettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
+                  {/* Debug Info */}
+                  <div className="mb-4 p-3 bg-gray-100 rounded-lg text-xs">
+                    <strong>Debug Info:</strong>
+                    <div>Razorpay Enabled: {paymentSettings.razorpayEnabled ? "✅" : "❌"}</div>
+                    <div>Razorpay Key ID: {paymentSettings.razorpayKeyId || "Not set"}</div>
+                    <div>Razorpay Key Secret: {paymentSettings.razorpayKeySecret ? "Set" : "Not set"}</div>
+                  </div>
+
                   <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="flex items-center">
                       <AlertCircle className="h-5 w-5 text-blue-600 mr-2" />
@@ -930,18 +1035,25 @@ export default function CombinedSettingsPage() {
                         </div>
                         <Switch
                           checked={paymentSettings.razorpayEnabled}
-                          onCheckedChange={(checked) => handlePaymentChange("razorpayEnabled", checked)}
+                          onCheckedChange={(checked) => {
+                            console.log("🔧 Razorpay toggle changed to:", checked)
+                            handlePaymentChange("razorpayEnabled", checked)
+                          }}
                         />
                       </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                           <Label htmlFor="razorpayKeyId" className="text-sm font-semibold text-gray-700">
-                            Key ID
+                            Key ID *
                           </Label>
                           <Input
                             id="razorpayKeyId"
                             value={paymentSettings.razorpayKeyId}
-                            onChange={(e) => handlePaymentChange("razorpayKeyId", e.target.value)}
+                            onChange={(e) => {
+                              console.log("🔧 Razorpay Key ID changed to:", e.target.value)
+                              handlePaymentChange("razorpayKeyId", e.target.value)
+                            }}
                             placeholder="rzp_test_xxxxxxxxxx"
                             className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.razorpayEnabled}
@@ -949,19 +1061,23 @@ export default function CombinedSettingsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="razorpayKeySecret" className="text-sm font-semibold text-gray-700">
-                            Key Secret
+                            Key Secret *
                           </Label>
                           <Input
                             id="razorpayKeySecret"
                             type="password"
                             value={paymentSettings.razorpayKeySecret}
-                            onChange={(e) => handlePaymentChange("razorpayKeySecret", e.target.value)}
+                            onChange={(e) => {
+                              console.log("🔧 Razorpay Key Secret changed")
+                              handlePaymentChange("razorpayKeySecret", e.target.value)
+                            }}
                             placeholder="••••••••••••••••"
                             className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.razorpayEnabled}
                           />
                         </div>
                       </div>
+
                       {paymentSettings.razorpayEnabled && (
                         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                           <p className="text-sm text-green-800">
