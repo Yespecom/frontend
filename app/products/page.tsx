@@ -226,7 +226,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [isSubmitting, setIsSubmitting] = useState(isSubmitting)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [apiErrors, setApiErrors] = useState<{ [key: string]: string }>({})
 
@@ -295,11 +295,11 @@ export default function ProductsPage() {
     if (data?.details && Array.isArray(data.details)) {
       console.error("🔍 Detailed validation errors:")
       data.details.forEach((detail: any, index: number) => {
-        console.error(`  ${index + 1}. Field: ${detail.field || 'unknown'}`)
-        console.error(`     Message: ${detail.message || 'unknown'}`)
+        console.error(`  ${index + 1}. Field: ${detail.field || "unknown"}`)
+        console.error(`     Message: ${detail.message || "unknown"}`)
         console.error(`     Value: ${detail.value}`)
-        console.error(`     Kind: ${detail.kind || 'unknown'}`)
-        console.error(`     Path: ${detail.path || 'unknown'}`)
+        console.error(`     Kind: ${detail.kind || "unknown"}`)
+        console.error(`     Path: ${detail.path || "unknown"}`)
       })
     }
 
@@ -589,13 +589,13 @@ export default function ProductsPage() {
   const handleCheckboxChange = (name: string, checked: boolean) => {
     setFormData((prev) => {
       const newFormData = { ...prev, [name]: checked }
-      
+
       // FIXED: Clear variants when hasVariants is disabled
       if (name === "hasVariants" && !checked) {
         console.log("🔄 Clearing variants because hasVariants is now false")
         newFormData.variants = []
       }
-      
+
       return newFormData
     })
   }
@@ -915,15 +915,18 @@ export default function ProductsPage() {
 
       // Log the exact variants data being sent
       if (formData.hasVariants) {
-        console.log("📋 Variants being sent:", formData.variants.map(v => ({
-          name: v.name,
-          price: v.price,
-          sku: v.sku,
-          stock: v.stock,
-          isActive: v.isActive,
-          hasId: !!v._id,
-          idType: typeof v._id,
-        })))
+        console.log(
+          "📋 Variants being sent:",
+          formData.variants.map((v) => ({
+            name: v.name,
+            price: v.price,
+            sku: v.sku,
+            stock: v.stock,
+            isActive: v.isActive,
+            hasId: !!v._id,
+            idType: typeof v._id,
+          })),
+        )
       } else {
         console.log("📋 hasVariants is false, sending empty variants array")
       }
@@ -951,8 +954,8 @@ export default function ProductsPage() {
       console.log("🔍 CRITICAL DEBUG - hasVariants and variants state:")
       console.log("  formData.hasVariants:", formData.hasVariants, typeof formData.hasVariants)
       console.log("  formData.variants.length:", formData.variants.length)
-      const hasVariants = document.querySelector<HTMLInputElement>("#hasVariants")?.checked;
-      const variants = formData.variants;
+      const hasVariants = document.querySelector<HTMLInputElement>("#hasVariants")?.checked
+      const variants = formData.variants
       console.log("  hasVariants form field value:", hasVariants)
       console.log("  variants form field value:", variants)
 
@@ -2464,5 +2467,7 @@ export default function ProductsPage() {
             )}
           </CardContent>
         </Card>
-      </div>\
+      </div>
     </AdminLayout>
+  )
+}
