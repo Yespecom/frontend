@@ -189,6 +189,20 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   )
 }
 
+// Add this helper function after the utility functions
+const validateAndFixPricing = () => {
+  if (!formData.hasVariants) {
+    const priceValue = safeToNumber(formData.price)
+    const originalPriceValue = safeToNumber(formData.originalPrice)
+
+    // If originalPrice is set but not greater than price, clear it
+    if (formData.originalPrice && originalPriceValue <= priceValue) {
+      setFormData((prev) => ({ ...prev, originalPrice: "" }))
+      showToast("Price Adjusted", "Original price was cleared because it must be greater than selling price", "warning")
+    }
+  }
+}
+
 // Add this function after the utility functions
 const debugFormData = () => {
   console.log("🔍 Current form state debug:", {
@@ -566,6 +580,7 @@ export default function ProductsPage() {
     setFilteredProducts(filtered)
   }
 
+  // Update the handleInputChange function to include price validation
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     if (name.startsWith("dimensions.")) {
@@ -579,6 +594,13 @@ export default function ProductsPage() {
       }))
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }))
+
+      // FIXED: Validate pricing fields on change
+      if (name === "price" || name === "originalPrice") {
+        setTimeout(() => {
+          validateAndFixPricing()
+        }, 100)
+      }
     }
   }
 
@@ -663,15 +685,33 @@ export default function ProductsPage() {
     showToast("Variant Deleted", `Variant '${variantToDelete.name}' has been removed.`, "success")
   }
 
+  // Update the handleVariantFormChange function
   const handleVariantFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
     setEditingVariant((prev) => {
       if (!prev) return null
-      return {
+      const updated = {
         ...prev,
         [name]: type === "checkbox" ? checked : value,
       }
+
+      // FIXED: Validate variant pricing
+      if (name === "price" || name === "originalPrice") {
+        const priceValue = safeToNumber(updated.price)
+        const originalPriceValue = safeToNumber(updated.originalPrice || "")
+
+        if (updated.originalPrice && originalPriceValue <= priceValue) {
+          updated.originalPrice = ""
+          showToast(
+            "Price Adjusted",
+            "Original price was cleared because it must be greater than selling price",
+            "warning",
+          )
+        }
+      }
+
+      return updated
     })
   }
 
@@ -786,6 +826,16 @@ export default function ProductsPage() {
         errors.push("Price must be greater than 0")
       }
 
+      // FIXED: Validate originalPrice properly
+      if (formData.originalPrice && formData.originalPrice.trim() !== "") {
+        const originalPriceValue = safeToNumber(formData.originalPrice)
+        if (isNaN(originalPriceValue) || originalPriceValue <= 0) {
+          errors.push("Original price must be a valid positive number")
+        } else if (originalPriceValue <= priceValue) {
+          errors.push("Original price must be greater than selling price")
+        }
+      }
+
       if (formData.trackQuantity) {
         const stockValue = safeToNumber(formData.stock)
         if (formData.stock === "" || stockValue < 0) {
@@ -842,15 +892,14 @@ export default function ProductsPage() {
           errors.push(`Duplicate SKU "${variantSku}" found in variants`)
         }
 
-        // Validate originalPrice if provided
+        // FIXED: Validate originalPrice for variants
         const variantOriginalPrice = safeToString(variant.originalPrice || "")
         if (variantOriginalPrice && variantOriginalPrice.trim() !== "") {
           const originalPriceValue = safeToNumber(variantOriginalPrice)
           if (isNaN(originalPriceValue) || originalPriceValue <= 0) {
-            errors.push(`Variant "${variantName}": Original price must be a valid number`)
-          }
-          if (originalPriceValue <= priceValue) {
-            errors.push(`Variant "${variantName}": Original price must be higher than selling price`)
+            errors.push(`Variant "${variantName}": Original price must be a valid positive number`)
+          } else if (originalPriceValue <= priceValue) {
+            errors.push(`Variant "${variantName}": Original price must be greater than selling price`)
           }
         }
       }
