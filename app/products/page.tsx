@@ -597,9 +597,17 @@ export default function ProductsPage() {
       return
     }
 
-    const variantToSave = {
-      ...editingVariant,
-      options: [editingVariant.name], // Backend expects options as an array
+    // Create clean variant object
+    const variantToSave: ProductVariant = {
+      _id: editingVariant._id || `temp-${Date.now()}-${Math.random()}`,
+      name: editingVariant.name.trim(),
+      options: [editingVariant.name.trim()], // Backend expects options as an array
+      price: editingVariant.price.toString(),
+      originalPrice: editingVariant.originalPrice ? editingVariant.originalPrice.toString() : undefined,
+      stock: editingVariant.stock.toString(),
+      sku: editingVariant.sku.trim().toUpperCase(),
+      isActive: Boolean(editingVariant.isActive),
+      image: editingVariant.image || "",
     }
 
     setFormData((prev) => {
@@ -611,8 +619,7 @@ export default function ProductsPage() {
         return { ...prev, variants: updatedVariants }
       } else {
         // Add new variant
-        const newVariantWithId = { ...variantToSave, _id: `temp-${Date.now()}-${Math.random()}` }
-        return { ...prev, variants: [...prev.variants, newVariantWithId] }
+        return { ...prev, variants: [...prev.variants, variantToSave] }
       }
     })
 
@@ -696,7 +703,22 @@ export default function ProductsPage() {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          submitData.append(key, JSON.stringify(value))
+          // Clean up variants data before sending
+          const cleanedVariants = formData.variants
+            .map((variant) => ({
+              _id: variant._id?.startsWith("temp-") ? undefined : variant._id, // Remove temp IDs
+              name: variant.name,
+              options: variant.options || [variant.name],
+              price: variant.price,
+              originalPrice: variant.originalPrice || undefined,
+              stock: variant.stock,
+              sku: variant.sku,
+              isActive: variant.isActive,
+              image: variant.image || "",
+            }))
+            .filter((variant) => variant.name && variant.price && variant.stock && variant.sku) // Only include complete variants
+
+          submitData.append(key, JSON.stringify(cleanedVariants))
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
         } else if (value !== "") {
