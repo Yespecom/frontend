@@ -189,6 +189,30 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   )
 }
 
+// Add this function after the utility functions
+const debugFormData = () => {
+  console.log("🔍 Current form state debug:", {
+    formData: {
+      ...formData,
+      variants: formData.variants.map((v, index) => ({
+        index,
+        _id: v._id,
+        name: v.name,
+        price: v.price,
+        priceType: typeof v.price,
+        stock: v.stock,
+        stockType: typeof v.stock,
+        sku: v.sku,
+        isActive: v.isActive,
+        image: v.image,
+      })),
+    },
+    images: images.length,
+    tags: tags.length,
+    editingProduct: !!editingProduct,
+  })
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
@@ -257,7 +281,7 @@ export default function ProductsPage() {
     addToast({ title, description, type })
   }
 
-  // Enhanced API error handling
+  // Enhanced API error handling with better logging
   const handleApiError = (endpoint: string, response: Response, data?: any): string => {
     console.error(`❌ API Error for ${endpoint}:`, {
       status: response.status,
@@ -278,6 +302,22 @@ export default function ProductsPage() {
         errorMessage = data.details.map((detail: any) => detail.message || detail).join(", ")
       } else if (typeof data.details === "string") {
         errorMessage = data.details
+      } else if (typeof data.details === "object") {
+        // Handle validation errors that might be in object format
+        const validationErrors = Object.entries(data.details)
+          .map(([field, error]) => `${field}: ${error}`)
+          .join(", ")
+        errorMessage = validationErrors || "Validation failed"
+      }
+    } else if (data?.errors) {
+      // Handle different error formats
+      if (Array.isArray(data.errors)) {
+        errorMessage = data.errors.map((error: any) => error.message || error).join(", ")
+      } else if (typeof data.errors === "object") {
+        const validationErrors = Object.entries(data.errors)
+          .map(([field, error]) => `${field}: ${error}`)
+          .join(", ")
+        errorMessage = validationErrors || "Validation failed"
       }
     } else {
       switch (response.status) {
@@ -816,44 +856,75 @@ export default function ProductsPage() {
     try {
       const submitData = new FormData()
 
-      // Add all form fields
+      // Log the data being prepared for submission
+      console.log("🔍 Preparing form data for submission:", {
+        editingProduct: !!editingProduct,
+        productId: editingProduct?._id,
+        hasVariants: formData.hasVariants,
+        variantCount: formData.variants.length,
+        trackQuantity: formData.trackQuantity,
+        formData: {
+          ...formData,
+          variants: formData.variants.map((v) => ({
+            _id: v._id,
+            name: v.name,
+            price: v.price,
+            stock: v.stock,
+            sku: v.sku,
+            isActive: v.isActive,
+          })),
+        },
+      })
+
+      // Add all form fields with better validation
       Object.entries(formData).forEach(([key, value]) => {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // FIXED: Clean up variants data with proper string conversion
+          // ENHANCED: Clean up variants data with more thorough validation
           const cleanedVariants = formData.variants
             .filter((variant) => {
               const requiredFields = ["name", "price", "sku"]
               if (formData.trackQuantity) {
                 requiredFields.push("stock")
               }
-              return requiredFields.every((field) => {
+              const isValid = requiredFields.every((field) => {
                 const fieldValue = safeToString(variant[field as keyof ProductVariant])
                 return fieldValue && fieldValue.trim() !== ""
               })
+
+              if (!isValid) {
+                console.warn("🚨 Filtering out invalid variant:", variant)
+              }
+              return isValid
             })
             .map((variant) => {
               const cleanVariant: any = {
                 name: safeToString(variant.name).trim(),
                 options: [safeToString(variant.name).trim()],
-                price: safeToString(variant.price),
+                price: Number.parseFloat(safeToString(variant.price)) || 0,
                 sku: safeToString(variant.sku).trim().toUpperCase(),
                 isActive: Boolean(variant.isActive),
                 image: safeToString(variant.image),
               }
 
+              // Only add stock if quantity tracking is enabled
               if (formData.trackQuantity && variant.stock !== undefined) {
-                cleanVariant.stock = safeToString(variant.stock)
+                cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
               }
 
+              // Only add _id if it's a valid MongoDB ObjectId (not temp ID)
               if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                 cleanVariant._id = variant._id
               }
 
+              // Only add originalPrice if it's provided and valid
               const originalPrice = safeToString(variant.originalPrice || "")
               if (originalPrice && originalPrice.trim() !== "") {
-                cleanVariant.originalPrice = originalPrice
+                const originalPriceNum = Number.parseFloat(originalPrice)
+                if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
+                  cleanVariant.originalPrice = originalPriceNum
+                }
               }
 
               return cleanVariant
@@ -863,8 +934,16 @@ export default function ProductsPage() {
           submitData.append(key, JSON.stringify(cleanedVariants))
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
-        } else if (value !== "") {
-          submitData.append(key, value as string)
+        } else if (value !== "" && value !== null && value !== undefined) {
+          // Convert numeric fields to proper numbers
+          if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
+            const numValue = Number.parseFloat(safeToString(value))
+            if (!isNaN(numValue)) {
+              submitData.append(key, numValue.toString())
+            }
+          } else {
+            submitData.append(key, safeToString(value))
+          }
         }
       })
 
@@ -890,6 +969,7 @@ export default function ProductsPage() {
         : `${API_BASE_URL}/api/admin/products`
       const method = editingProduct ? "PUT" : "POST"
 
+      // Log the final request details
       console.log(`📝 Submitting product data:`, {
         method,
         url,
@@ -899,6 +979,16 @@ export default function ProductsPage() {
         variantCount: formData.variants.length,
         trackQuantity: formData.trackQuantity,
       })
+
+      // Log FormData contents for debugging
+      console.log("📋 FormData contents:")
+      for (const [key, value] of submitData.entries()) {
+        if (key === "variants" || key === "tags" || key === "dimensions") {
+          console.log(`  ${key}:`, JSON.parse(value as string))
+        } else {
+          console.log(`  ${key}:`, value)
+        }
+      }
 
       const { response, data } = await makeApiRequest(url, {
         method,
@@ -921,7 +1011,17 @@ export default function ProductsPage() {
     } catch (error) {
       console.error("❌ Submit error:", error)
       const errorMessage = error instanceof Error ? error.message : "Something went wrong. Please try again."
-      showToast("Error", errorMessage, "error")
+
+      // Show more specific error message if available
+      if (errorMessage.includes("Validation failed")) {
+        showToast(
+          "Validation Error",
+          "Please check all required fields and ensure data is valid. Check the console for detailed error information.",
+          "error",
+        )
+      } else {
+        showToast("Error", errorMessage, "error")
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -1662,6 +1762,15 @@ export default function ProductsPage() {
 
                   {/* Form Actions */}
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                    {/* Temporary debug button - remove after fixing */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={debugFormData}
+                      className="bg-yellow-50 border-yellow-200 text-yellow-800"
+                    >
+                      Debug Form Data
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
