@@ -226,7 +226,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(isSubmitting)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [apiErrors, setApiErrors] = useState<{ [key: string]: string }>({})
 
@@ -570,7 +570,17 @@ export default function ProductsPage() {
   }
 
   const handleCheckboxChange = (name: string, checked: boolean) => {
-    setFormData((prev) => ({ ...prev, [name]: checked }))
+    setFormData((prev) => {
+      const newFormData = { ...prev, [name]: checked }
+      
+      // FIXED: Clear variants when hasVariants is disabled
+      if (name === "hasVariants" && !checked) {
+        console.log("🔄 Clearing variants because hasVariants is now false")
+        newFormData.variants = []
+      }
+      
+      return newFormData
+    })
   }
 
   const addTag = () => {
@@ -881,57 +891,64 @@ export default function ProductsPage() {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // ENHANCED: Clean up variants data with more thorough validation
-          const cleanedVariants = formData.variants
-            .filter((variant) => {
-              const requiredFields = ["name", "price", "sku"]
-              if (formData.trackQuantity) {
-                requiredFields.push("stock")
-              }
-              const isValid = requiredFields.every((field) => {
-                const fieldValue = safeToString(variant[field as keyof ProductVariant])
-                return fieldValue && fieldValue.trim() !== ""
+          // CRITICAL FIX: Only send variants if hasVariants is true
+          if (formData.hasVariants) {
+            // ENHANCED: Clean up variants data with more thorough validation
+            const cleanedVariants = formData.variants
+              .filter((variant) => {
+                const requiredFields = ["name", "price", "sku"]
+                if (formData.trackQuantity) {
+                  requiredFields.push("stock")
+                }
+                const isValid = requiredFields.every((field) => {
+                  const fieldValue = safeToString(variant[field as keyof ProductVariant])
+                  return fieldValue && fieldValue.trim() !== ""
+                })
+
+                if (!isValid) {
+                  console.warn("🚨 Filtering out invalid variant:", variant)
+                }
+                return isValid
+              })
+              .map((variant) => {
+                const cleanVariant: any = {
+                  name: safeToString(variant.name).trim(),
+                  options: [safeToString(variant.name).trim()],
+                  price: Number.parseFloat(safeToString(variant.price)) || 0,
+                  sku: safeToString(variant.sku).trim().toUpperCase(),
+                  isActive: Boolean(variant.isActive),
+                  image: safeToString(variant.image),
+                }
+
+                // Only add stock if quantity tracking is enabled
+                if (formData.trackQuantity && variant.stock !== undefined) {
+                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
+                }
+
+                // Only add _id if it's a valid MongoDB ObjectId (not temp ID)
+                if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
+                  cleanVariant._id = variant._id
+                }
+
+                // Only add originalPrice if it's provided and valid
+                const originalPrice = safeToString(variant.originalPrice || "")
+                if (originalPrice && originalPrice.trim() !== "") {
+                  const originalPriceNum = Number.parseFloat(originalPrice)
+                  if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
+                    cleanVariant.originalPrice = originalPriceNum
+                  }
+                }
+
+                return cleanVariant
               })
 
-              if (!isValid) {
-                console.warn("🚨 Filtering out invalid variant:", variant)
-              }
-              return isValid
-            })
-            .map((variant) => {
-              const cleanVariant: any = {
-                name: safeToString(variant.name).trim(),
-                options: [safeToString(variant.name).trim()],
-                price: Number.parseFloat(safeToString(variant.price)) || 0,
-                sku: safeToString(variant.sku).trim().toUpperCase(),
-                isActive: Boolean(variant.isActive),
-                image: safeToString(variant.image),
-              }
-
-              // Only add stock if quantity tracking is enabled
-              if (formData.trackQuantity && variant.stock !== undefined) {
-                cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
-              }
-
-              // Only add _id if it's a valid MongoDB ObjectId (not temp ID)
-              if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
-                cleanVariant._id = variant._id
-              }
-
-              // Only add originalPrice if it's provided and valid
-              const originalPrice = safeToString(variant.originalPrice || "")
-              if (originalPrice && originalPrice.trim() !== "") {
-                const originalPriceNum = Number.parseFloat(originalPrice)
-                if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
-                  cleanVariant.originalPrice = originalPriceNum
-                }
-              }
-
-              return cleanVariant
-            })
-
-          console.log("🔍 Cleaned variants for backend:", cleanedVariants)
-          submitData.append(key, JSON.stringify(cleanedVariants))
+            console.log("🔍 Cleaned variants for backend:", cleanedVariants)
+            submitData.append(key, JSON.stringify(cleanedVariants))
+          } else {
+            // CRITICAL FIX: Send empty array when hasVariants is false
+            console.log("🔍 hasVariants is false, sending empty variants array")
+            submitData.append(key, JSON.stringify([]))
+          }
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
         } else if (value !== "" && value !== null && value !== undefined) {
@@ -976,7 +993,7 @@ export default function ProductsPage() {
         hasImages: images.length > 0,
         imageCount: images.length,
         hasVariants: formData.hasVariants,
-        variantCount: formData.variants.length,
+        variantCount: formData.hasVariants ? formData.variants.length : 0,
         trackQuantity: formData.trackQuantity,
       })
 
@@ -1616,9 +1633,6 @@ export default function ProductsPage() {
                           checked={formData.hasVariants}
                           onCheckedChange={(checked) => {
                             handleCheckboxChange("hasVariants", checked as boolean)
-                            if (!checked) {
-                              setFormData((prev) => ({ ...prev, variants: [] }))
-                            }
                           }}
                         />
                         <Label htmlFor="hasVariants" className="text-sm">
@@ -1762,15 +1776,6 @@ export default function ProductsPage() {
 
                   {/* Form Actions */}
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                    {/* Temporary debug button - remove after fixing */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={debugFormData}
-                      className="bg-yellow-50 border-yellow-200 text-yellow-800"
-                    >
-                      Debug Form Data
-                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -2393,7 +2398,5 @@ export default function ProductsPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </div>\
     </AdminLayout>
-  )
-}
