@@ -947,6 +947,20 @@ export default function ProductsPage() {
         }
       }
 
+      // CRITICAL DEBUG: Log the exact hasVariants and variants values being sent
+      console.log("🔍 CRITICAL DEBUG - hasVariants and variants state:")
+      console.log("  formData.hasVariants:", formData.hasVariants, typeof formData.hasVariants)
+      console.log("  formData.variants.length:", formData.variants.length)
+      const hasVariants = document.querySelector<HTMLInputElement>("#hasVariants")?.checked;
+      const variants = formData.variants;
+      console.log("  hasVariants form field value:", hasVariants)
+      console.log("  variants form field value:", variants)
+
+      // Log what will be sent in FormData
+      console.log("🔍 What will be sent to backend:")
+      console.log("  hasVariants field:", formData.hasVariants.toString())
+      console.log("  variants field:", formData.hasVariants ? JSON.stringify(cleanedVariants) : JSON.stringify([]))
+
       // Add all form fields with better validation
       Object.entries(formData).forEach(([key, value]) => {
         if (key === "dimensions") {
@@ -1004,10 +1018,13 @@ export default function ProductsPage() {
               })
 
             console.log("🔍 Cleaned variants for backend:", cleanedVariants)
+            console.log("🔍 hasVariants is TRUE, sending variants:", cleanedVariants.length)
             submitData.append(key, JSON.stringify(cleanedVariants))
           } else {
             // CRITICAL FIX: Send empty array when hasVariants is false
-            console.log("🔍 hasVariants is false, sending empty variants array")
+            console.log("🔍 hasVariants is FALSE, sending empty variants array")
+            console.log("🔍 Current formData.variants length:", formData.variants.length)
+            console.log("🔍 Current formData.hasVariants:", formData.hasVariants)
             submitData.append(key, JSON.stringify([]))
           }
         } else if (typeof value === "boolean") {
