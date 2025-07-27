@@ -264,6 +264,9 @@ export default function CombinedSettingsPage() {
     stripeEnabled: false,
     phonePeEnabled: false,
     onlinePaymentEnabled: false,
+    paypalEnabled: false,
+    paypalClientId: "",
+    paypalClientSecret: "",
   })
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({
     deliveryTime: "",
@@ -336,6 +339,11 @@ export default function CombinedSettingsPage() {
               phonePeWebhookUrl: data.phonePeWebhookUrl || "",
               phonePeEnabled: data.phonePeEnabled || false,
 
+              // Add PayPal handling
+              paypalEnabled: data.paypalEnabled || false,
+              paypalClientId: data.paypalClientId || "",
+              paypalClientSecret: data.paypalClientSecret || "",
+
               codEnabled: data.codEnabled !== undefined ? data.codEnabled : true,
               onlinePaymentEnabled: data.onlinePaymentEnabled !== undefined ? data.onlinePaymentEnabled : false,
             }
@@ -363,6 +371,14 @@ export default function CombinedSettingsPage() {
               paymentData.phonePeWebhookUrl = data.phonepe.webhookUrl || paymentData.phonePeWebhookUrl
               paymentData.phonePeEnabled =
                 data.phonepe.enabled !== undefined ? data.phonepe.enabled : paymentData.phonePeEnabled
+            }
+
+            // Add PayPal nested structure handling
+            if (data.paypal) {
+              paymentData.paypalEnabled =
+                data.paypal.enabled !== undefined ? data.paypal.enabled : paymentData.paypalEnabled
+              paymentData.paypalClientId = data.paypal.clientId || paymentData.paypalClientId
+              paymentData.paypalClientSecret = data.paypal.clientSecret || paymentData.paypalClientSecret
             }
 
             console.log(`🔧 Processed payment data:`, paymentData)
@@ -435,6 +451,11 @@ export default function CombinedSettingsPage() {
           phonePeEnvironment: data.phonePeEnvironment,
           phonePeWebhookUrl: data.phonePeWebhookUrl,
 
+          // PayPal (add missing fields)
+          paypalEnabled: data.paypalEnabled || false,
+          paypalClientId: data.paypalClientId || "",
+          paypalClientSecret: data.paypalClientSecret || "",
+
           // Nested structure (for new backend)
           razorpay: {
             enabled: data.razorpayEnabled,
@@ -453,6 +474,12 @@ export default function CombinedSettingsPage() {
             saltIndex: data.phonePeSaltIndex,
             environment: data.phonePeEnvironment,
             webhookUrl: data.phonePeWebhookUrl,
+          },
+          // Add PayPal nested structure
+          paypal: {
+            enabled: data.paypalEnabled || false,
+            clientId: data.paypalClientId || "",
+            clientSecret: data.paypalClientSecret || "",
           },
         }
       }
