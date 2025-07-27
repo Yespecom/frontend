@@ -215,7 +215,6 @@ export default function ProductsPage() {
     hasVariants: false,
     variants: [] as ProductVariant[],
   })
-
   const [images, setImages] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
@@ -300,7 +299,7 @@ export default function ProductsPage() {
     return errorMessage
   }
 
-  // Enhanced API request function with retry logic
+  // Enhanced API request function with retry logic and fixed FormData handling
   const makeApiRequest = async (
     url: string,
     options: RequestInit = {},
@@ -311,23 +310,34 @@ export default function ProductsPage() {
       throw new Error("No authentication token found. Please log in.")
     }
 
+    // Don't set Content-Type for FormData - let browser handle it
+    const defaultHeaders: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    }
+
+    // Only add Content-Type for non-FormData requests
+    if (!(options.body instanceof FormData)) {
+      defaultHeaders["Content-Type"] = "application/json"
+    }
+
     const defaultOptions: RequestInit = {
       headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        ...defaultHeaders,
         ...options.headers,
       },
       ...options,
     }
 
     console.log(`🚀 Making API request to: ${url}`)
+    console.log(`📋 Request method: ${options.method || "GET"}`)
+    console.log(`📋 Body type: ${options.body instanceof FormData ? "FormData" : typeof options.body}`)
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetch(url, defaultOptions)
         const responseText = await response.text()
-
         let data
+
         try {
           data = responseText ? JSON.parse(responseText) : {}
         } catch (parseError) {
@@ -359,7 +369,6 @@ export default function ProductsPage() {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
       }
     }
-
     throw new Error("Max retries exceeded")
   }
 
@@ -381,7 +390,6 @@ export default function ProductsPage() {
   // Auto-generate variant SKU
   const generateVariantSKU = () => {
     if (!editingVariant) return
-
     const baseSKU = formData.sku || "PRD"
     const variantName = editingVariant.name
       .replace(/[^a-zA-Z0-9]/g, "")
@@ -389,7 +397,6 @@ export default function ProductsPage() {
       .slice(0, 6)
     const timestamp = Date.now().toString().slice(-4)
     const newSKU = `${baseSKU}-${variantName}${timestamp}`
-
     setEditingVariant((prev) => {
       if (!prev) return null
       return { ...prev, sku: newSKU }
@@ -555,7 +562,6 @@ export default function ProductsPage() {
   const handleVariantFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
-
     setEditingVariant((prev) => {
       if (!prev) return null
       return {
@@ -735,6 +741,7 @@ export default function ProductsPage() {
         body: submitData,
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          // Don't set Content-Type - let browser handle it for FormData
         },
       })
 
@@ -996,7 +1003,6 @@ export default function ProductsPage() {
                     {editingProduct ? "Update product information and details" : "Create a new product for your store"}
                   </DialogDescription>
                 </DialogHeader>
-
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
                   <Tabs defaultValue="basic" className="w-full">
                     <TabsList className="grid w-full grid-cols-5 bg-gray-100">
@@ -1046,7 +1052,6 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="shortDescription">Short Description *</Label>
                         <Textarea
@@ -1062,7 +1067,6 @@ export default function ProductsPage() {
                         />
                         <p className="text-xs text-gray-500">{formData.shortDescription.length}/200 characters</p>
                       </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="description">Full Description *</Label>
                         <Textarea
@@ -1076,7 +1080,6 @@ export default function ProductsPage() {
                           className="border-gray-300"
                         />
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Category *</Label>
@@ -1103,7 +1106,6 @@ export default function ProductsPage() {
                           </Select>
                           {apiErrors.categories && <p className="text-xs text-red-600">⚠️ Categories failed to load</p>}
                         </div>
-
                         <div className="space-y-2">
                           <Label>Offer (Optional)</Label>
                           <Select value={formData.offer} onValueChange={(value) => handleSelectChange("offer", value)}>
@@ -1215,7 +1217,6 @@ export default function ProductsPage() {
                           />
                         </div>
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="stock">Stock Quantity *</Label>
@@ -1260,7 +1261,6 @@ export default function ProductsPage() {
                           />
                         </div>
                       </div>
-
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="allowBackorders"
