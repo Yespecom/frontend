@@ -44,7 +44,6 @@ export default function ForgotPasswordPage(): ReactElement {
     if (countdown > 0) {
       timerRef.current = setTimeout(() => setCountdown(countdown - 1), 1000)
     }
-
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current)
@@ -89,6 +88,8 @@ export default function ForgotPasswordPage(): ReactElement {
   const makeApiRequest = useCallback(
     async (url: string, body: object): Promise<{ success: boolean; data?: ApiResponse; error?: string }> => {
       try {
+        console.log(`🔄 Making API request to: ${url}`, body)
+
         const response = await fetch(url, {
           method: "POST",
           headers: {
@@ -98,6 +99,7 @@ export default function ForgotPasswordPage(): ReactElement {
         })
 
         const data: ApiResponse = await response.json()
+        console.log(`📡 API response:`, { status: response.status, data })
 
         if (response.ok) {
           return { success: true, data }
@@ -106,8 +108,7 @@ export default function ForgotPasswordPage(): ReactElement {
           return { success: false, error: errorMessage }
         }
       } catch (error) {
-        console.error("API request failed:", error)
-
+        console.error("💥 API request failed:", error)
         // Check if it's a network error
         if (error instanceof TypeError && error.message.includes("fetch")) {
           return {
@@ -115,7 +116,6 @@ export default function ForgotPasswordPage(): ReactElement {
             error: "Network error. Please check your internet connection and try again.",
           }
         }
-
         return {
           success: false,
           error: "Unable to connect to the server. Please try again later.",
@@ -142,7 +142,8 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    const result = await makeApiRequest("https://api.yespstudio.com/api/otp/send", {
+    // Fixed API endpoint to match backend
+    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/send", {
       email: email.trim(),
       purpose: "password_reset",
     })
@@ -168,7 +169,8 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    const result = await makeApiRequest("https://api.yespstudio.com/api/otp/verify", {
+    // Fixed API endpoint to match backend
+    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/verify", {
       email: email.trim(),
       otp: otp,
       purpose: "password_reset",
@@ -199,7 +201,8 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    const result = await makeApiRequest("https://api.yespstudio.com/api/reset-password", {
+    // Fixed API endpoint to match backend
+    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/reset-password", {
       email: email.trim(),
       otp: otp,
       newPassword: newPassword,
@@ -220,7 +223,8 @@ export default function ForgotPasswordPage(): ReactElement {
     setResendLoading(true)
     setError("")
 
-    const result = await makeApiRequest("https://api.yespstudio.com/api/otp/resend", {
+    // Fixed API endpoint to match backend
+    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/resend", {
       email: email.trim(),
       purpose: "password_reset",
     })
@@ -283,7 +287,13 @@ export default function ForgotPasswordPage(): ReactElement {
           <div className="flex justify-between items-center py-6">
             <Link href="/" className="flex items-center space-x-4 group">
               <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105">
-                <Image src="/logo.png" alt="Yesp Ecom Studio Logo" width={48} height={48} className="w-12 h-12" />
+                <Image
+                  src="/placeholder.svg?height=48&width=48&text=Logo"
+                  alt="Yesp Ecom Studio Logo"
+                  width={48}
+                  height={48}
+                  className="w-12 h-12"
+                />
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-slate-900">Yesp Ecom Studio</span>
@@ -340,7 +350,6 @@ export default function ForgotPasswordPage(): ReactElement {
                 {step === "success" && "You can now sign in with your new password"}
               </CardDescription>
             </CardHeader>
-
             <CardContent className="space-y-6">
               {/* Error Message */}
               {error && (
@@ -375,7 +384,6 @@ export default function ForgotPasswordPage(): ReactElement {
                     </div>
                     {fieldError && <p className="text-sm text-red-600">{fieldError}</p>}
                   </div>
-
                   <Button
                     type="submit"
                     className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
@@ -415,7 +423,6 @@ export default function ForgotPasswordPage(): ReactElement {
                       </InputOTP>
                     </div>
                   </div>
-
                   <Button
                     type="submit"
                     className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
@@ -428,12 +435,11 @@ export default function ForgotPasswordPage(): ReactElement {
                       </div>
                     ) : (
                       <div className="flex items-center space-x-2">
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-4 w-4" />
                         <span>Verify Code</span>
                       </div>
                     )}
                   </Button>
-
                   <div className="text-center space-y-3">
                     <p className="text-sm text-slate-600">Didn't receive the code?</p>
                     <Button
@@ -455,7 +461,6 @@ export default function ForgotPasswordPage(): ReactElement {
                       )}
                     </Button>
                   </div>
-
                   <div className="text-center">
                     <Button
                       type="button"
@@ -506,7 +511,6 @@ export default function ForgotPasswordPage(): ReactElement {
                       </Button>
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
                       Confirm New Password
@@ -540,7 +544,6 @@ export default function ForgotPasswordPage(): ReactElement {
                       </Button>
                     </div>
                   </div>
-
                   <Button
                     type="submit"
                     className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
@@ -570,7 +573,6 @@ export default function ForgotPasswordPage(): ReactElement {
                       Your password has been successfully reset!
                     </AlertDescription>
                   </Alert>
-
                   <div className="space-y-4">
                     <p className="text-slate-600">You can now sign in with your new password.</p>
                     <Link href="/login">
