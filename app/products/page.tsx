@@ -226,7 +226,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [isSubmitting, setIsSubmitting] = useState(isSubmitting)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [apiErrors, setApiErrors] = useState<{ [key: string]: string }>({})
 
@@ -290,6 +290,23 @@ export default function ProductsPage() {
       data,
       headers: Object.fromEntries(response.headers.entries()),
     })
+
+    // Enhanced logging for validation errors
+    if (data?.details && Array.isArray(data.details)) {
+      console.error("🔍 Detailed validation errors:")
+      data.details.forEach((detail: any, index: number) => {
+        console.error(`  ${index + 1}. Field: ${detail.field || 'unknown'}`)
+        console.error(`     Message: ${detail.message || 'unknown'}`)
+        console.error(`     Value: ${detail.value}`)
+        console.error(`     Kind: ${detail.kind || 'unknown'}`)
+        console.error(`     Path: ${detail.path || 'unknown'}`)
+      })
+    }
+
+    // Enhanced logging for debug info
+    if (data?.debugInfo) {
+      console.error("🔍 Debug information:", data.debugInfo)
+    }
 
     let errorMessage = "Something went wrong. Please try again."
 
@@ -885,6 +902,50 @@ export default function ProductsPage() {
           })),
         },
       })
+
+      // Enhanced logging before API call
+      console.log("🚀 About to send API request with the following data:")
+      console.log("📋 Form state summary:", {
+        hasVariants: formData.hasVariants,
+        variantCount: formData.variants.length,
+        trackQuantity: formData.trackQuantity,
+        isEditing: !!editingProduct,
+        productId: editingProduct?._id,
+      })
+
+      // Log the exact variants data being sent
+      if (formData.hasVariants) {
+        console.log("📋 Variants being sent:", formData.variants.map(v => ({
+          name: v.name,
+          price: v.price,
+          sku: v.sku,
+          stock: v.stock,
+          isActive: v.isActive,
+          hasId: !!v._id,
+          idType: typeof v._id,
+        })))
+      } else {
+        console.log("📋 hasVariants is false, sending empty variants array")
+      }
+
+      // Log FormData contents for debugging (keep existing code)
+      console.log("📋 FormData contents:")
+      for (const [key, value] of submitData.entries()) {
+        if (key === "variants" || key === "tags" || key === "dimensions") {
+          try {
+            const parsed = JSON.parse(value as string)
+            console.log(`  ${key}:`, parsed)
+            if (key === "variants") {
+              console.log(`  variants length: ${parsed.length}`)
+              console.log(`  variants isEmpty: ${parsed.length === 0}`)
+            }
+          } catch (e) {
+            console.log(`  ${key}: (parse error)`, value)
+          }
+        } else {
+          console.log(`  ${key}:`, value)
+        }
+      }
 
       // Add all form fields with better validation
       Object.entries(formData).forEach(([key, value]) => {
@@ -2329,18 +2390,6 @@ export default function ProductsPage() {
                               </span>
                             </div>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={product.isActive ? "default" : "secondary"}
-                            className={`text-xs ${
-                              product.isActive
-                                ? "bg-green-50 text-green-700 border border-green-200"
-                                : "bg-gray-50 text-gray-700 border border-gray-200"
-                            }`}
-                          >
-                            {product.isActive ? "Active" : "Inactive"}
-                          </Badge>
                         </TableCell>
                         <TableCell>
                           {product.offer ? (
