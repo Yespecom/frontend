@@ -226,7 +226,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(isSubmitting)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [apiErrors, setApiErrors] = useState<{ [key: string]: string }>({})
 
