@@ -1,5 +1,4 @@
 "use client"
-
 import { DialogTrigger } from "@/components/ui/dialog"
 import type React from "react"
 import { useState, useEffect } from "react"
@@ -36,7 +35,6 @@ import {
   XCircle,
   Info,
   Copy,
-  AlertTriangle,
   Download,
   Upload,
   ToggleLeft,
@@ -53,7 +51,7 @@ interface Product {
   gallery: string[]
   price: number
   originalPrice?: number
-  stock?: number // MODIFIED: Now optional
+  stock?: number
   stockStatus: string
   shortDescription: string
   description: string
@@ -72,7 +70,7 @@ interface Product {
   discountPercentage?: number
   hasVariants: boolean
   variants: ProductVariant[]
-  trackQuantity: boolean // NEW: Quantity tracking flag
+  trackQuantity: boolean
 }
 
 interface Category {
@@ -101,7 +99,7 @@ interface ProductVariant {
   options?: string[]
   price: string
   originalPrice?: string
-  stock?: string // MODIFIED: Now optional
+  stock?: string
   sku: string
   isActive: boolean
   image: string
@@ -110,7 +108,7 @@ interface ProductVariant {
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.yespstudio.com"
 
-// Professional Toast Notification Component
+// Toast Notification Component
 function ToastNotification({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -217,8 +215,9 @@ export default function ProductsPage() {
     metaDescription: "",
     hasVariants: false,
     variants: [] as ProductVariant[],
-    trackQuantity: true, // NEW: Default to tracking quantity
+    trackQuantity: true,
   })
+
   const [images, setImages] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
@@ -255,13 +254,17 @@ export default function ProductsPage() {
 
     let errorMessage = "Something went wrong. Please try again."
 
-    // Handle specific error messages from the server
     if (data?.error) {
       errorMessage = data.error
     } else if (data?.message) {
       errorMessage = data.message
+    } else if (data?.details) {
+      if (Array.isArray(data.details)) {
+        errorMessage = data.details.map((detail: any) => detail.message || detail).join(", ")
+      } else if (typeof data.details === "string") {
+        errorMessage = data.details
+      }
     } else {
-      // Fallback based on status codes
       switch (response.status) {
         case 400:
           errorMessage = "Bad request. Please check your data and try again."
@@ -289,12 +292,6 @@ export default function ProductsPage() {
         case 500:
           errorMessage = "Server error. Please try again later."
           break
-        case 502:
-          errorMessage = "Bad gateway. The server is temporarily unavailable."
-          break
-        case 503:
-          errorMessage = "Service unavailable. Please try again later."
-          break
         default:
           errorMessage = `Request failed with status ${response.status}. Please try again.`
       }
@@ -303,7 +300,7 @@ export default function ProductsPage() {
     return errorMessage
   }
 
-  // Enhanced API request function with retry logic and fixed FormData handling
+  // Enhanced API request function
   const makeApiRequest = async (
     url: string,
     options: RequestInit = {},
@@ -314,12 +311,10 @@ export default function ProductsPage() {
       throw new Error("No authentication token found. Please log in.")
     }
 
-    // Don't set Content-Type for FormData - let browser handle it
     const defaultHeaders: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     }
 
-    // Only add Content-Type for non-FormData requests
     if (!(options.body instanceof FormData)) {
       defaultHeaders["Content-Type"] = "application/json"
     }
@@ -333,8 +328,6 @@ export default function ProductsPage() {
     }
 
     console.log(`🚀 Making API request to: ${url}`)
-    console.log(`📋 Request method: ${options.method || "GET"}`)
-    console.log(`📋 Body type: ${options.body instanceof FormData ? "FormData" : typeof options.body}`)
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -468,7 +461,6 @@ export default function ProductsPage() {
   const filterProducts = () => {
     let filtered = products
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(
         (product) =>
@@ -478,12 +470,10 @@ export default function ProductsPage() {
       )
     }
 
-    // Category filter
     if (selectedCategory !== "all") {
       filtered = filtered.filter((product) => product.category._id === selectedCategory)
     }
 
-    // Status filter
     if (selectedStatus !== "all") {
       if (selectedStatus === "active") {
         filtered = filtered.filter((product) => product.isActive)
@@ -550,7 +540,6 @@ export default function ProductsPage() {
       image: "",
     }
 
-    // Only add stock field if quantity tracking is enabled
     if (formData.trackQuantity) {
       newVariant.stock = ""
     }
@@ -606,6 +595,7 @@ export default function ProductsPage() {
     }
 
     const missingFields = requiredFields.filter((field) => !editingVariant[field as keyof ProductVariant])
+
     if (missingFields.length > 0) {
       showToast(
         "Validation Error",
@@ -634,7 +624,6 @@ export default function ProductsPage() {
       image: editingVariant.image || "",
     }
 
-    // Only include stock if quantity tracking is enabled
     if (formData.trackQuantity && editingVariant.stock !== undefined) {
       variantToSave.stock = editingVariant.stock.toString()
     }
@@ -642,12 +631,10 @@ export default function ProductsPage() {
     setFormData((prev) => {
       const existingIndex = prev.variants.findIndex((v) => v._id === editingVariant._id)
       if (existingIndex !== -1) {
-        // Update existing variant
         const updatedVariants = [...prev.variants]
         updatedVariants[existingIndex] = variantToSave
         return { ...prev, variants: updatedVariants }
       } else {
-        // Add new variant
         return { ...prev, variants: [...prev.variants, variantToSave] }
       }
     })
@@ -657,56 +644,59 @@ export default function ProductsPage() {
     setEditingVariant(null)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // FIXED: Enhanced form validation
+  const validateForm = () => {
+    const errors: string[] = []
 
-    // Enhanced validation
+    // Basic validation
     if (!formData.name.trim()) {
-      showToast("Validation Error", "Product name is required.", "error")
-      return
+      errors.push("Product name is required")
     }
 
     if (!formData.sku.trim()) {
-      showToast("Validation Error", "SKU is required.", "error")
-      return
+      errors.push("SKU is required")
+    }
+
+    if (!formData.shortDescription.trim()) {
+      errors.push("Short description is required")
+    }
+
+    if (!formData.description.trim()) {
+      errors.push("Description is required")
     }
 
     if (!formData.category) {
-      showToast("Category Required", "Please select a product category.", "error")
-      return
+      errors.push("Category is required")
     }
 
     if (!formData.hasVariants) {
-      // Validate main product fields if not using variants
+      // Validate main product fields
       if (!formData.price || Number(formData.price) <= 0) {
-        showToast("Validation Error", "Price must be greater than 0.", "error")
-        return
+        errors.push("Price must be greater than 0")
       }
 
-      if (formData.trackQuantity && (!formData.stock || Number(formData.stock) < 0)) {
-        showToast("Validation Error", "Stock quantity cannot be negative when quantity tracking is enabled.", "error")
-        return
+      if (formData.trackQuantity) {
+        if (formData.stock === "" || Number(formData.stock) < 0) {
+          errors.push("Stock quantity cannot be negative when quantity tracking is enabled")
+        }
       }
 
       // Check for images - required for new products, optional for updates
       if (!editingProduct && images.length === 0) {
-        showToast("Images Required", "Please upload at least one product image.", "error")
-        return
+        errors.push("At least one product image is required")
       }
     } else {
       // Validate variants
       if (formData.variants.length === 0) {
-        showToast("Variants Required", "Please add at least one variant.", "error")
-        return
+        errors.push("At least one variant is required when variants are enabled")
       }
 
-      // Validate each variant with detailed error messages
+      // Validate each variant
       for (let i = 0; i < formData.variants.length; i++) {
         const variant = formData.variants[i]
 
         if (!variant.name || variant.name.trim() === "") {
-          showToast("Variant Validation Error", `Variant ${i + 1}: Name is required.`, "error")
-          return
+          errors.push(`Variant ${i + 1}: Name is required`)
         }
 
         if (
@@ -715,8 +705,7 @@ export default function ProductsPage() {
           isNaN(Number(variant.price)) ||
           Number(variant.price) <= 0
         ) {
-          showToast("Variant Validation Error", `Variant "${variant.name}": Valid price is required.`, "error")
-          return
+          errors.push(`Variant "${variant.name}": Valid price is required`)
         }
 
         if (formData.trackQuantity) {
@@ -726,18 +715,12 @@ export default function ProductsPage() {
             isNaN(Number(variant.stock)) ||
             Number(variant.stock) < 0
           ) {
-            showToast(
-              "Variant Validation Error",
-              `Variant "${variant.name}": Valid stock quantity is required when quantity tracking is enabled.`,
-              "error",
-            )
-            return
+            errors.push(`Variant "${variant.name}": Valid stock quantity is required when quantity tracking is enabled`)
           }
         }
 
         if (!variant.sku || variant.sku.trim() === "") {
-          showToast("Variant Validation Error", `Variant "${variant.name}": SKU is required.`, "error")
-          return
+          errors.push(`Variant "${variant.name}": SKU is required`)
         }
 
         // Check for duplicate SKUs
@@ -745,43 +728,42 @@ export default function ProductsPage() {
           (v, index) => index !== i && v.sku.trim().toUpperCase() === variant.sku.trim().toUpperCase(),
         )
         if (duplicateSku) {
-          showToast("Variant Validation Error", `Duplicate SKU "${variant.sku}" found in variants.`, "error")
-          return
+          errors.push(`Duplicate SKU "${variant.sku}" found in variants`)
         }
 
         // Validate originalPrice if provided
         if (variant.originalPrice && variant.originalPrice.trim() !== "") {
           if (isNaN(Number(variant.originalPrice)) || Number(variant.originalPrice) <= 0) {
-            showToast(
-              "Variant Validation Error",
-              `Variant "${variant.name}": Original price must be a valid number.`,
-              "error",
-            )
-            return
+            errors.push(`Variant "${variant.name}": Original price must be a valid number`)
           }
           if (Number(variant.originalPrice) <= Number(variant.price)) {
-            showToast(
-              "Variant Validation Error",
-              `Variant "${variant.name}": Original price must be higher than selling price.`,
-              "error",
-            )
-            return
+            errors.push(`Variant "${variant.name}": Original price must be higher than selling price`)
           }
         }
       }
 
-      // For variants, check if at least one image exists (either main product images or variant images)
+      // For variants, check if at least one image exists
       const hasMainImages = images.length > 0
       const hasVariantImages = formData.variants.some((variant) => variant.image && variant.image.trim() !== "")
-
       if (!editingProduct && !hasMainImages && !hasVariantImages) {
-        showToast("Images Required", "Please upload at least one image for the product or its variants.", "error")
-        return
+        errors.push("At least one image is required (either main product images or variant images)")
       }
     }
 
-    setIsSubmitting(true)
+    return errors
+  }
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validate form
+    const validationErrors = validateForm()
+    if (validationErrors.length > 0) {
+      showToast("Validation Error", validationErrors[0], "error")
+      return
+    }
+
+    setIsSubmitting(true)
     try {
       const submitData = new FormData()
 
@@ -790,7 +772,7 @@ export default function ProductsPage() {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // Clean up variants data before sending - completely remove temp IDs
+          // Clean up variants data before sending
           const cleanedVariants = formData.variants
             .filter((variant) => {
               const requiredFields = ["name", "price", "sku"]
@@ -800,7 +782,6 @@ export default function ProductsPage() {
               return requiredFields.every((field) => variant[field as keyof ProductVariant])
             })
             .map((variant) => {
-              // Create clean variant object matching backend schema exactly
               const cleanVariant: any = {
                 name: variant.name.trim(),
                 options: [variant.name.trim()],
@@ -810,17 +791,14 @@ export default function ProductsPage() {
                 image: variant.image || "",
               }
 
-              // Only include stock if quantity tracking is enabled
               if (formData.trackQuantity && variant.stock !== undefined) {
                 cleanVariant.stock = variant.stock.toString()
               }
 
-              // Only include _id if it's a real database ID (not temp) AND it's a valid ObjectId format
               if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                 cleanVariant._id = variant._id
               }
 
-              // Only include originalPrice if it exists and is valid
               if (variant.originalPrice && variant.originalPrice.trim() !== "") {
                 cleanVariant.originalPrice = variant.originalPrice.toString()
               }
@@ -840,13 +818,12 @@ export default function ProductsPage() {
       // Add tags
       submitData.append("tags", JSON.stringify(tags))
 
-      // Add images - always include the images array, even if empty
+      // Add images
       if (images.length > 0) {
         images.forEach((imageUrl) => {
           submitData.append("existingImages", imageUrl)
         })
       } else {
-        // Send empty array to indicate no images
         submitData.append("existingImages", JSON.stringify([]))
       }
 
@@ -870,31 +847,18 @@ export default function ProductsPage() {
         trackQuantity: formData.trackQuantity,
       })
 
-      // Debug: Log FormData contents
-      console.log("🔍 FormData contents:")
-      for (const [key, value] of submitData.entries()) {
-        if (key === "variants") {
-          console.log(`${key}:`, value)
-        } else if (value instanceof File) {
-          console.log(`${key}: File - ${value.name}`)
-        } else {
-          console.log(`${key}:`, value)
-        }
-      }
-
       const { response, data } = await makeApiRequest(url, {
         method,
         body: submitData,
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
-          // Don't set Content-Type - let browser handle it for FormData
         },
       })
 
       if (response.ok) {
         showToast(
           editingProduct ? "Product Updated" : "Product Created",
-          `Product "${data.name || formData.name}" has been ${editingProduct ? "updated" : "created"} successfully.`,
+          `Product "${data.data?.name || formData.name}" has been ${editingProduct ? "updated" : "created"} successfully.`,
           "success",
         )
         setDialogOpen(false)
@@ -904,15 +868,7 @@ export default function ProductsPage() {
     } catch (error) {
       console.error("❌ Submit error:", error)
       const errorMessage = error instanceof Error ? error.message : "Something went wrong. Please try again."
-
-      // Provide more specific error messages based on the error
-      if (errorMessage.includes("image") || errorMessage.includes("Image")) {
-        showToast("Image Error", errorMessage, "error")
-      } else if (errorMessage.includes("validation") || errorMessage.includes("required")) {
-        showToast("Validation Error", errorMessage, "error")
-      } else {
-        showToast("Error", errorMessage, "error")
-      }
+      showToast("Error", errorMessage, "error")
     } finally {
       setIsSubmitting(false)
     }
@@ -923,36 +879,51 @@ export default function ProductsPage() {
     setViewDialogOpen(true)
   }
 
+  // FIXED: Enhanced edit function with proper data handling
   const handleEdit = (product: Product) => {
+    console.log("🔍 Editing product:", product)
+
     setEditingProduct(product)
+
+    // Set form data with proper type conversion and fallbacks
     setFormData({
-      name: product.name,
-      sku: product.sku,
-      shortDescription: product.shortDescription,
-      description: product.description,
-      price: product.price.toString(),
-      originalPrice: product.originalPrice?.toString() || "",
-      taxPercentage: product.taxPercentage?.toString() || "",
-      stock: product.stock?.toString() || "",
+      name: product.name || "",
+      sku: product.sku || "",
+      shortDescription: product.shortDescription || "",
+      description: product.description || "",
+      price: product.hasVariants ? "0" : product.price?.toString() || "",
+      originalPrice: product.hasVariants ? "" : product.originalPrice?.toString() || "",
+      taxPercentage: product.taxPercentage?.toString() || "0",
+      stock: product.hasVariants ? "0" : product.stock?.toString() || "",
       lowStockAlert: product.lowStockAlert?.toString() || "5",
-      allowBackorders: product.allowBackorders || false,
-      category: product.category._id,
+      allowBackorders: Boolean(product.allowBackorders),
+      category: product.category?._id || "",
       offer: product.offer?._id || "none",
-      weight: product.weight?.toString() || "",
+      weight: product.weight?.toString() || "0",
       dimensions: {
-        length: product.dimensions?.length?.toString() || "",
-        width: product.dimensions?.width?.toString() || "",
-        height: product.dimensions?.height?.toString() || "",
+        length: product.dimensions?.length?.toString() || "0",
+        width: product.dimensions?.width?.toString() || "0",
+        height: product.dimensions?.height?.toString() || "0",
       },
       metaTitle: product.metaTitle || "",
       metaDescription: product.metaDescription || "",
-      hasVariants: product.hasVariants || false,
-      variants: product.variants || [],
-      trackQuantity: product.trackQuantity !== undefined ? product.trackQuantity : true, // Default to true if not set
+      hasVariants: Boolean(product.hasVariants),
+      variants: product.variants ? [...product.variants] : [],
+      trackQuantity: product.trackQuantity !== undefined ? Boolean(product.trackQuantity) : true,
     })
-    setImages(product.gallery || [])
-    setTags(product.tags || [])
+
+    // Set images and tags
+    setImages(product.gallery ? [...product.gallery] : [])
+    setTags(product.tags ? [...product.tags] : [])
     setTagInput("")
+
+    console.log("✅ Form data set for editing:", {
+      hasVariants: product.hasVariants,
+      variantCount: product.variants?.length || 0,
+      trackQuantity: product.trackQuantity,
+      imageCount: product.gallery?.length || 0,
+    })
+
     setDialogOpen(true)
   }
 
@@ -999,7 +970,7 @@ export default function ProductsPage() {
       metaDescription: "",
       hasVariants: false,
       variants: [],
-      trackQuantity: true, // Default to tracking quantity
+      trackQuantity: true,
     })
     setImages([])
     setTags([])
@@ -1014,12 +985,10 @@ export default function ProductsPage() {
     }).format(amount)
   }
 
-  // MODIFIED: Stock status functions now handle optional stock
   const getStockStatusColor = (product: Product) => {
     if (!product.trackQuantity) {
       return "bg-blue-50 text-blue-700 border border-blue-200"
     }
-
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
@@ -1038,7 +1007,6 @@ export default function ProductsPage() {
     if (!product.trackQuantity) {
       return "Not Tracked"
     }
-
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
@@ -1084,16 +1052,6 @@ export default function ProductsPage() {
           <div className="flex flex-col items-center space-y-4">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-slate-800"></div>
             <p className="text-gray-500 text-sm">Loading products...</p>
-            {Object.keys(apiErrors).length > 0 && (
-              <div className="text-center space-y-2">
-                <p className="text-red-600 text-sm">Some data failed to load:</p>
-                {Object.entries(apiErrors).map(([key, error]) => (
-                  <div key={key} className="text-xs text-red-500">
-                    {key}: {error}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </AdminLayout>
@@ -1104,43 +1062,11 @@ export default function ProductsPage() {
     <AdminLayout>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div className="space-y-6 p-6">
-        {/* API Error Alerts */}
-        {Object.entries(apiErrors).map(
-          ([key, error]) =>
-            error && (
-              <Card key={key} className="border-red-200 bg-red-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
-                      <div>
-                        <p className="text-sm font-medium text-red-800">Failed to load {key}</p>
-                        <p className="text-xs text-red-600">{error}</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRetry(key as "products" | "categories" | "offers")}
-                      className="text-red-600 border-red-300 hover:bg-red-100"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Retry
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ),
-        )}
-
         {/* Header */}
         <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Products</h1>
             <p className="text-gray-600 text-sm">Manage your product inventory and catalog</p>
-            {apiErrors.products && (
-              <p className="text-red-600 text-xs mt-1">⚠️ Product data may be incomplete due to API errors</p>
-            )}
           </div>
           <div className="flex items-center space-x-3">
             <Button variant="outline" onClick={handleExportProducts}>
@@ -1217,6 +1143,7 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </div>
+
                       <div className="space-y-2">
                         <Label htmlFor="shortDescription">Short Description *</Label>
                         <Textarea
@@ -1232,6 +1159,7 @@ export default function ProductsPage() {
                         />
                         <p className="text-xs text-gray-500">{formData.shortDescription.length}/200 characters</p>
                       </div>
+
                       <div className="space-y-2">
                         <Label htmlFor="description">Full Description *</Label>
                         <Textarea
@@ -1245,6 +1173,7 @@ export default function ProductsPage() {
                           className="border-gray-300"
                         />
                       </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Category *</Label>
@@ -1256,20 +1185,13 @@ export default function ProductsPage() {
                               <SelectValue placeholder="Select category" />
                             </SelectTrigger>
                             <SelectContent>
-                              {categories.length === 0 && apiErrors.categories ? (
-                                <SelectItem value="" disabled>
-                                  Failed to load categories
+                              {categories.map((category) => (
+                                <SelectItem key={category._id} value={category._id}>
+                                  {category.name}
                                 </SelectItem>
-                              ) : (
-                                categories.map((category) => (
-                                  <SelectItem key={category._id} value={category._id}>
-                                    {category.name}
-                                  </SelectItem>
-                                ))
-                              )}
+                              ))}
                             </SelectContent>
                           </Select>
-                          {apiErrors.categories && <p className="text-xs text-red-600">⚠️ Categories failed to load</p>}
                         </div>
                         <div className="space-y-2">
                           <Label>Offer (Optional)</Label>
@@ -1279,25 +1201,18 @@ export default function ProductsPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">No offer</SelectItem>
-                              {offers.length === 0 && apiErrors.offers ? (
-                                <SelectItem value="" disabled>
-                                  Failed to load offers
+                              {offers.map((offer) => (
+                                <SelectItem key={offer._id} value={offer._id}>
+                                  {offer.name} ({offer.value}
+                                  {offer.type === "percentage" ? "%" : offer.type === "flat" ? " off" : ""})
                                 </SelectItem>
-                              ) : (
-                                offers.map((offer) => (
-                                  <SelectItem key={offer._id} value={offer._id}>
-                                    {offer.name} ({offer.value}
-                                    {offer.type === "percentage" ? "%" : offer.type === "flat" ? " off" : ""})
-                                  </SelectItem>
-                                ))
-                              )}
+                              ))}
                             </SelectContent>
                           </Select>
-                          {apiErrors.offers && <p className="text-xs text-red-600">⚠️ Offers failed to load</p>}
                         </div>
                       </div>
 
-                      {/* NEW: Quantity Tracking Toggle */}
+                      {/* Quantity Tracking Toggle */}
                       <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg border">
                         <div className="flex items-center space-x-2">
                           <Button
@@ -1410,7 +1325,7 @@ export default function ProductsPage() {
                         </div>
                       </div>
 
-                      {/* MODIFIED: Stock fields only show when quantity tracking is enabled */}
+                      {/* Stock fields only show when quantity tracking is enabled */}
                       {formData.trackQuantity && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-2">
@@ -1756,7 +1671,6 @@ export default function ProductsPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {/* MODIFIED: Stock field only shows when quantity tracking is enabled */}
                       {formData.trackQuantity && (
                         <div className="space-y-2">
                           <Label htmlFor="variantStock">Stock Quantity *</Label>
@@ -2118,19 +2032,6 @@ export default function ProductsPage() {
                       <Package className="h-10 w-10 text-slate-400" />
                     </div>
                   </div>
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2">
-                    <div className="animate-pulse">
-                      <div className="w-2 h-2 bg-slate-300 rounded-full absolute -top-8 -left-8 animate-ping"></div>
-                      <div
-                        className="w-1 h-1 bg-slate-400 rounded-full absolute -top-4 left-8 animate-ping"
-                        style={{ animationDelay: "0.5s" }}
-                      ></div>
-                      <div
-                        className="w-1.5 h-1.5 bg-slate-300 rounded-full absolute -top-6 left-12 animate-ping"
-                        style={{ animationDelay: "1s" }}
-                      ></div>
-                    </div>
-                  </div>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                   {searchTerm || selectedCategory !== "all" || selectedStatus !== "all"
@@ -2154,17 +2055,6 @@ export default function ProductsPage() {
                     Add Your First Product
                   </Button>
                 )}
-                <div className="flex justify-center space-x-1">
-                  <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-slate-300 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-slate-300 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
