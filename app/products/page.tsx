@@ -671,15 +671,67 @@ export default function ProductsPage() {
         return
       }
 
-      // Validate each variant
-      for (const variant of formData.variants) {
-        if (!variant.name || !variant.price || !variant.stock || !variant.sku) {
-          showToast(
-            "Variant Validation Error",
-            `All variant fields are required for '${variant.name || "unnamed variant"}'.`,
-            "error",
-          )
+      // Validate each variant with detailed error messages
+      for (let i = 0; i < formData.variants.length; i++) {
+        const variant = formData.variants[i]
+
+        if (!variant.name || variant.name.trim() === "") {
+          showToast("Variant Validation Error", `Variant ${i + 1}: Name is required.`, "error")
           return
+        }
+
+        if (
+          !variant.price ||
+          variant.price.trim() === "" ||
+          isNaN(Number(variant.price)) ||
+          Number(variant.price) <= 0
+        ) {
+          showToast("Variant Validation Error", `Variant "${variant.name}": Valid price is required.`, "error")
+          return
+        }
+
+        if (
+          !variant.stock ||
+          variant.stock.trim() === "" ||
+          isNaN(Number(variant.stock)) ||
+          Number(variant.stock) < 0
+        ) {
+          showToast("Variant Validation Error", `Variant "${variant.name}": Valid stock quantity is required.`, "error")
+          return
+        }
+
+        if (!variant.sku || variant.sku.trim() === "") {
+          showToast("Variant Validation Error", `Variant "${variant.name}": SKU is required.`, "error")
+          return
+        }
+
+        // Check for duplicate SKUs
+        const duplicateSku = formData.variants.find(
+          (v, index) => index !== i && v.sku.trim().toUpperCase() === variant.sku.trim().toUpperCase(),
+        )
+        if (duplicateSku) {
+          showToast("Variant Validation Error", `Duplicate SKU "${variant.sku}" found in variants.`, "error")
+          return
+        }
+
+        // Validate originalPrice if provided
+        if (variant.originalPrice && variant.originalPrice.trim() !== "") {
+          if (isNaN(Number(variant.originalPrice)) || Number(variant.originalPrice) <= 0) {
+            showToast(
+              "Variant Validation Error",
+              `Variant "${variant.name}": Original price must be a valid number.`,
+              "error",
+            )
+            return
+          }
+          if (Number(variant.originalPrice) <= Number(variant.price)) {
+            showToast(
+              "Variant Validation Error",
+              `Variant "${variant.name}": Original price must be higher than selling price.`,
+              "error",
+            )
+            return
+          }
         }
       }
 
@@ -703,21 +755,35 @@ export default function ProductsPage() {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // Clean up variants data before sending
+          // Clean up variants data before sending - match backend expectations exactly
           const cleanedVariants = formData.variants
-            .map((variant) => ({
-              _id: variant._id?.startsWith("temp-") ? undefined : variant._id, // Remove temp IDs
-              name: variant.name,
-              options: variant.options || [variant.name],
-              price: variant.price,
-              originalPrice: variant.originalPrice || undefined,
-              stock: variant.stock,
-              sku: variant.sku,
-              isActive: variant.isActive,
-              image: variant.image || "",
-            }))
             .filter((variant) => variant.name && variant.price && variant.stock && variant.sku) // Only include complete variants
+            .map((variant) => {
+              // Create clean variant object matching backend schema exactly
+              const cleanVariant: any = {
+                name: variant.name.trim(),
+                options: [variant.name.trim()], // Backend expects this as array
+                price: variant.price.toString(), // Backend expects string
+                stock: variant.stock.toString(), // Backend expects string
+                sku: variant.sku.trim().toUpperCase(),
+                isActive: Boolean(variant.isActive),
+                image: variant.image || "",
+              }
 
+              // Only include _id if it's a real database ID (not temp)
+              if (variant._id && !variant._id.startsWith("temp-")) {
+                cleanVariant._id = variant._id
+              }
+
+              // Only include originalPrice if it exists and is valid
+              if (variant.originalPrice && variant.originalPrice.trim() !== "") {
+                cleanVariant.originalPrice = variant.originalPrice.toString()
+              }
+
+              return cleanVariant
+            })
+
+          console.log("🔍 Cleaned variants for backend:", cleanedVariants)
           submitData.append(key, JSON.stringify(cleanedVariants))
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
