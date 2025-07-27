@@ -39,6 +39,8 @@ import {
   AlertTriangle,
   Download,
   Upload,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react"
 
 // Interfaces
@@ -51,7 +53,7 @@ interface Product {
   gallery: string[]
   price: number
   originalPrice?: number
-  stock: number
+  stock?: number // MODIFIED: Now optional
   stockStatus: string
   shortDescription: string
   description: string
@@ -70,6 +72,7 @@ interface Product {
   discountPercentage?: number
   hasVariants: boolean
   variants: ProductVariant[]
+  trackQuantity: boolean // NEW: Quantity tracking flag
 }
 
 interface Category {
@@ -95,10 +98,10 @@ interface Toast {
 interface ProductVariant {
   _id?: string
   name: string
-  options?: string[] // Backend field
+  options?: string[]
   price: string
   originalPrice?: string
-  stock: string
+  stock?: string // MODIFIED: Now optional
   sku: string
   isActive: boolean
   image: string
@@ -214,6 +217,7 @@ export default function ProductsPage() {
     metaDescription: "",
     hasVariants: false,
     variants: [] as ProductVariant[],
+    trackQuantity: true, // NEW: Default to tracking quantity
   })
   const [images, setImages] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
@@ -486,9 +490,14 @@ export default function ProductsPage() {
       } else if (selectedStatus === "inactive") {
         filtered = filtered.filter((product) => !product.isActive)
       } else if (selectedStatus === "low-stock") {
-        filtered = filtered.filter((product) => product.stock <= product.lowStockAlert)
+        filtered = filtered.filter(
+          (product) => product.trackQuantity && product.stock !== undefined && product.stock <= product.lowStockAlert,
+        )
       } else if (selectedStatus === "out-of-stock") {
-        filtered = filtered.filter((product) => product.stock === 0 && !product.allowBackorders)
+        filtered = filtered.filter(
+          (product) =>
+            product.trackQuantity && product.stock !== undefined && product.stock === 0 && !product.allowBackorders,
+        )
       }
     }
 
@@ -532,15 +541,21 @@ export default function ProductsPage() {
 
   // Variant Management Functions
   const handleAddVariantClick = () => {
-    setEditingVariant({
+    const newVariant: ProductVariant = {
       name: "",
       price: "",
       originalPrice: "",
-      stock: "",
       sku: "",
       isActive: true,
       image: "",
-    })
+    }
+
+    // Only add stock field if quantity tracking is enabled
+    if (formData.trackQuantity) {
+      newVariant.stock = ""
+    }
+
+    setEditingVariant(newVariant)
     setVariantImageUploadKey((prev) => prev + 1)
     setIsVariantDialogOpen(true)
   }
@@ -585,8 +600,18 @@ export default function ProductsPage() {
     if (!editingVariant) return
 
     // Basic validation for variant
-    if (!editingVariant.name || !editingVariant.price || !editingVariant.stock || !editingVariant.sku) {
-      showToast("Validation Error", "Variant name, price, stock, and SKU are required.", "error")
+    const requiredFields = ["name", "price", "sku"]
+    if (formData.trackQuantity) {
+      requiredFields.push("stock")
+    }
+
+    const missingFields = requiredFields.filter((field) => !editingVariant[field as keyof ProductVariant])
+    if (missingFields.length > 0) {
+      showToast(
+        "Validation Error",
+        `${missingFields.join(", ")} ${missingFields.length === 1 ? "is" : "are"} required.`,
+        "error",
+      )
       return
     }
 
@@ -601,13 +626,17 @@ export default function ProductsPage() {
     const variantToSave: ProductVariant = {
       _id: editingVariant._id || `temp-${Date.now()}-${Math.random()}`,
       name: editingVariant.name.trim(),
-      options: [editingVariant.name.trim()], // Backend expects options as an array
+      options: [editingVariant.name.trim()],
       price: editingVariant.price.toString(),
       originalPrice: editingVariant.originalPrice ? editingVariant.originalPrice.toString() : undefined,
-      stock: editingVariant.stock.toString(),
       sku: editingVariant.sku.trim().toUpperCase(),
       isActive: Boolean(editingVariant.isActive),
       image: editingVariant.image || "",
+    }
+
+    // Only include stock if quantity tracking is enabled
+    if (formData.trackQuantity && editingVariant.stock !== undefined) {
+      variantToSave.stock = editingVariant.stock.toString()
     }
 
     setFormData((prev) => {
@@ -654,8 +683,8 @@ export default function ProductsPage() {
         return
       }
 
-      if (!formData.stock || Number(formData.stock) < 0) {
-        showToast("Validation Error", "Stock quantity cannot be negative.", "error")
+      if (formData.trackQuantity && (!formData.stock || Number(formData.stock) < 0)) {
+        showToast("Validation Error", "Stock quantity cannot be negative when quantity tracking is enabled.", "error")
         return
       }
 
@@ -690,14 +719,20 @@ export default function ProductsPage() {
           return
         }
 
-        if (
-          !variant.stock ||
-          variant.stock.trim() === "" ||
-          isNaN(Number(variant.stock)) ||
-          Number(variant.stock) < 0
-        ) {
-          showToast("Variant Validation Error", `Variant "${variant.name}": Valid stock quantity is required.`, "error")
-          return
+        if (formData.trackQuantity) {
+          if (
+            !variant.stock ||
+            variant.stock.trim() === "" ||
+            isNaN(Number(variant.stock)) ||
+            Number(variant.stock) < 0
+          ) {
+            showToast(
+              "Variant Validation Error",
+              `Variant "${variant.name}": Valid stock quantity is required when quantity tracking is enabled.`,
+              "error",
+            )
+            return
+          }
         }
 
         if (!variant.sku || variant.sku.trim() === "") {
@@ -755,23 +790,33 @@ export default function ProductsPage() {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // Clean up variants data before sending - match backend expectations exactly
+          // Clean up variants data before sending - completely remove temp IDs
           const cleanedVariants = formData.variants
-            .filter((variant) => variant.name && variant.price && variant.stock && variant.sku) // Only include complete variants
+            .filter((variant) => {
+              const requiredFields = ["name", "price", "sku"]
+              if (formData.trackQuantity) {
+                requiredFields.push("stock")
+              }
+              return requiredFields.every((field) => variant[field as keyof ProductVariant])
+            })
             .map((variant) => {
               // Create clean variant object matching backend schema exactly
               const cleanVariant: any = {
                 name: variant.name.trim(),
-                options: [variant.name.trim()], // Backend expects this as array
-                price: variant.price.toString(), // Backend expects string
-                stock: variant.stock.toString(), // Backend expects string
+                options: [variant.name.trim()],
+                price: variant.price.toString(),
                 sku: variant.sku.trim().toUpperCase(),
                 isActive: Boolean(variant.isActive),
                 image: variant.image || "",
               }
 
-              // Only include _id if it's a real database ID (not temp)
-              if (variant._id && !variant._id.startsWith("temp-")) {
+              // Only include stock if quantity tracking is enabled
+              if (formData.trackQuantity && variant.stock !== undefined) {
+                cleanVariant.stock = variant.stock.toString()
+              }
+
+              // Only include _id if it's a real database ID (not temp) AND it's a valid ObjectId format
+              if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                 cleanVariant._id = variant._id
               }
 
@@ -822,7 +867,20 @@ export default function ProductsPage() {
         imageCount: images.length,
         hasVariants: formData.hasVariants,
         variantCount: formData.variants.length,
+        trackQuantity: formData.trackQuantity,
       })
+
+      // Debug: Log FormData contents
+      console.log("🔍 FormData contents:")
+      for (const [key, value] of submitData.entries()) {
+        if (key === "variants") {
+          console.log(`${key}:`, value)
+        } else if (value instanceof File) {
+          console.log(`${key}: File - ${value.name}`)
+        } else {
+          console.log(`${key}:`, value)
+        }
+      }
 
       const { response, data } = await makeApiRequest(url, {
         method,
@@ -875,7 +933,7 @@ export default function ProductsPage() {
       price: product.price.toString(),
       originalPrice: product.originalPrice?.toString() || "",
       taxPercentage: product.taxPercentage?.toString() || "",
-      stock: product.stock.toString(),
+      stock: product.stock?.toString() || "",
       lowStockAlert: product.lowStockAlert?.toString() || "5",
       allowBackorders: product.allowBackorders || false,
       category: product.category._id,
@@ -890,6 +948,7 @@ export default function ProductsPage() {
       metaDescription: product.metaDescription || "",
       hasVariants: product.hasVariants || false,
       variants: product.variants || [],
+      trackQuantity: product.trackQuantity !== undefined ? product.trackQuantity : true, // Default to true if not set
     })
     setImages(product.gallery || [])
     setTags(product.tags || [])
@@ -940,6 +999,7 @@ export default function ProductsPage() {
       metaDescription: "",
       hasVariants: false,
       variants: [],
+      trackQuantity: true, // Default to tracking quantity
     })
     setImages([])
     setTags([])
@@ -954,7 +1014,16 @@ export default function ProductsPage() {
     }).format(amount)
   }
 
-  const getStockStatusColor = (stock: number, lowStockAlert: number, allowBackorders: boolean) => {
+  // MODIFIED: Stock status functions now handle optional stock
+  const getStockStatusColor = (product: Product) => {
+    if (!product.trackQuantity) {
+      return "bg-blue-50 text-blue-700 border border-blue-200"
+    }
+
+    const stock = product.stock || 0
+    const lowStockAlert = product.lowStockAlert || 5
+    const allowBackorders = product.allowBackorders || false
+
     if (stock === 0 && !allowBackorders) {
       return "bg-red-50 text-red-700 border border-red-200"
     } else if (stock <= lowStockAlert && stock > 0) {
@@ -965,7 +1034,15 @@ export default function ProductsPage() {
     return "bg-gray-50 text-gray-700 border border-gray-200"
   }
 
-  const getStockStatusText = (stock: number, lowStockAlert: number, allowBackorders: boolean) => {
+  const getStockStatusText = (product: Product) => {
+    if (!product.trackQuantity) {
+      return "Not Tracked"
+    }
+
+    const stock = product.stock || 0
+    const lowStockAlert = product.lowStockAlert || 5
+    const allowBackorders = product.allowBackorders || false
+
     if (stock === 0 && !allowBackorders) {
       return "Out of Stock"
     } else if (stock <= lowStockAlert && stock > 0) {
@@ -1220,6 +1297,33 @@ export default function ProductsPage() {
                         </div>
                       </div>
 
+                      {/* NEW: Quantity Tracking Toggle */}
+                      <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg border">
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCheckboxChange("trackQuantity", !formData.trackQuantity)}
+                            className="p-0 h-auto"
+                          >
+                            {formData.trackQuantity ? (
+                              <ToggleRight className="h-6 w-6 text-green-600" />
+                            ) : (
+                              <ToggleLeft className="h-6 w-6 text-gray-400" />
+                            )}
+                          </Button>
+                          <Label className="text-sm font-medium">Track Quantity</Label>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-600">
+                            {formData.trackQuantity
+                              ? "Stock quantities will be tracked and managed for this product."
+                              : "This product will not track stock quantities (suitable for digital products or services)."}
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Tags */}
                       <div className="space-y-2">
                         <Label>Product Tags</Label>
@@ -1305,60 +1409,80 @@ export default function ProductsPage() {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="stock">Stock Quantity *</Label>
-                          <Input
-                            id="stock"
-                            name="stock"
-                            type="number"
-                            value={formData.stock}
-                            onChange={handleInputChange}
-                            placeholder="0"
-                            required={!formData.hasVariants}
-                            className="border-gray-300"
-                            disabled={formData.hasVariants}
-                          />
-                          {formData.hasVariants && (
-                            <p className="text-xs text-gray-500">Stock is managed by variants.</p>
-                          )}
+
+                      {/* MODIFIED: Stock fields only show when quantity tracking is enabled */}
+                      {formData.trackQuantity && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="stock">Stock Quantity *</Label>
+                            <Input
+                              id="stock"
+                              name="stock"
+                              type="number"
+                              value={formData.stock}
+                              onChange={handleInputChange}
+                              placeholder="0"
+                              required={!formData.hasVariants && formData.trackQuantity}
+                              className="border-gray-300"
+                              disabled={formData.hasVariants}
+                            />
+                            {formData.hasVariants && (
+                              <p className="text-xs text-gray-500">Stock is managed by variants.</p>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="lowStockAlert">Low Stock Alert</Label>
+                            <Input
+                              id="lowStockAlert"
+                              name="lowStockAlert"
+                              type="number"
+                              value={formData.lowStockAlert}
+                              onChange={handleInputChange}
+                              placeholder="5"
+                              className="border-gray-300"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="weight">Weight (kg)</Label>
+                            <Input
+                              id="weight"
+                              name="weight"
+                              type="number"
+                              step="0.01"
+                              value={formData.weight}
+                              onChange={handleInputChange}
+                              placeholder="0.00"
+                              className="border-gray-300"
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="lowStockAlert">Low Stock Alert</Label>
-                          <Input
-                            id="lowStockAlert"
-                            name="lowStockAlert"
-                            type="number"
-                            value={formData.lowStockAlert}
-                            onChange={handleInputChange}
-                            placeholder="5"
-                            className="border-gray-300"
-                          />
+                      )}
+
+                      {!formData.trackQuantity && (
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center space-x-2">
+                            <Info className="h-5 w-5 text-blue-600" />
+                            <p className="text-sm text-blue-800 font-medium">Quantity Tracking Disabled</p>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-1">
+                            Stock quantities are not being tracked for this product. This is suitable for digital
+                            products, services, or items with unlimited availability.
+                          </p>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="weight">Weight (kg)</Label>
-                          <Input
-                            id="weight"
-                            name="weight"
-                            type="number"
-                            step="0.01"
-                            value={formData.weight}
-                            onChange={handleInputChange}
-                            placeholder="0.00"
-                            className="border-gray-300"
+                      )}
+
+                      {formData.trackQuantity && (
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="allowBackorders"
+                            checked={formData.allowBackorders}
+                            onCheckedChange={(checked) => handleCheckboxChange("allowBackorders", checked as boolean)}
                           />
+                          <Label htmlFor="allowBackorders" className="text-sm">
+                            Allow backorders when out of stock
+                          </Label>
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="allowBackorders"
-                          checked={formData.allowBackorders}
-                          onCheckedChange={(checked) => handleCheckboxChange("allowBackorders", checked as boolean)}
-                        />
-                        <Label htmlFor="allowBackorders" className="text-sm">
-                          Allow backorders when out of stock
-                        </Label>
-                      </div>
+                      )}
 
                       {/* Dimensions */}
                       <div className="space-y-2">
@@ -1442,7 +1566,7 @@ export default function ProductsPage() {
                                   <TableRow>
                                     <TableHead>Variant Name</TableHead>
                                     <TableHead>Price</TableHead>
-                                    <TableHead>Stock</TableHead>
+                                    {formData.trackQuantity && <TableHead>Stock</TableHead>}
                                     <TableHead>SKU</TableHead>
                                     <TableHead>Image</TableHead>
                                     <TableHead>Status</TableHead>
@@ -1467,7 +1591,7 @@ export default function ProductsPage() {
                                             )}
                                         </div>
                                       </TableCell>
-                                      <TableCell>{variant.stock}</TableCell>
+                                      {formData.trackQuantity && <TableCell>{variant.stock || "0"}</TableCell>}
                                       <TableCell>
                                         <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
                                           {variant.sku}
@@ -1632,18 +1756,21 @@ export default function ProductsPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="variantStock">Stock Quantity *</Label>
-                        <Input
-                          id="variantStock"
-                          name="stock"
-                          type="number"
-                          value={editingVariant.stock}
-                          onChange={handleVariantFormChange}
-                          placeholder="0"
-                          required
-                        />
-                      </div>
+                      {/* MODIFIED: Stock field only shows when quantity tracking is enabled */}
+                      {formData.trackQuantity && (
+                        <div className="space-y-2">
+                          <Label htmlFor="variantStock">Stock Quantity *</Label>
+                          <Input
+                            id="variantStock"
+                            name="stock"
+                            type="number"
+                            value={editingVariant.stock || ""}
+                            onChange={handleVariantFormChange}
+                            placeholder="0"
+                            required={formData.trackQuantity}
+                          />
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label htmlFor="variantSku">SKU *</Label>
                         <div className="flex space-x-2">
@@ -1763,6 +1890,19 @@ export default function ProductsPage() {
                           {viewingProduct.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Quantity Tracking</p>
+                        <Badge
+                          variant={viewingProduct.trackQuantity ? "default" : "secondary"}
+                          className={`text-xs ${
+                            viewingProduct.trackQuantity
+                              ? "bg-blue-50 text-blue-700 border border-blue-200"
+                              : "bg-gray-50 text-gray-700 border border-gray-200"
+                          }`}
+                        >
+                          {viewingProduct.trackQuantity ? "Enabled" : "Disabled"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1799,35 +1939,27 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Stock Information</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Stock Quantity:</span>
-                        <span className="font-semibold">{viewingProduct.stock} units</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Stock Status:</span>
-                        <Badge
-                          className={getStockStatusColor(
-                            viewingProduct.stock,
-                            viewingProduct.lowStockAlert,
-                            viewingProduct.allowBackorders,
-                          )}
-                        >
-                          {getStockStatusText(
-                            viewingProduct.stock,
-                            viewingProduct.lowStockAlert,
-                            viewingProduct.allowBackorders,
-                          )}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Low Stock Alert:</span>
-                        <span>{viewingProduct.lowStockAlert} units</span>
+                  {viewingProduct.trackQuantity && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Stock Information</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Stock Quantity:</span>
+                          <span className="font-semibold">{viewingProduct.stock || 0} units</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Stock Status:</span>
+                          <Badge className={getStockStatusColor(viewingProduct)}>
+                            {getStockStatusText(viewingProduct)}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Low Stock Alert:</span>
+                          <span>{viewingProduct.lowStockAlert} units</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Variants Display */}
@@ -1839,7 +1971,7 @@ export default function ProductsPage() {
                         <TableRow>
                           <TableHead>Name</TableHead>
                           <TableHead>Price</TableHead>
-                          <TableHead>Stock</TableHead>
+                          {viewingProduct.trackQuantity && <TableHead>Stock</TableHead>}
                           <TableHead>SKU</TableHead>
                           <TableHead>Image</TableHead>
                           <TableHead>Status</TableHead>
@@ -1862,7 +1994,7 @@ export default function ProductsPage() {
                                   )}
                               </div>
                             </TableCell>
-                            <TableCell>{variant.stock}</TableCell>
+                            {viewingProduct.trackQuantity && <TableCell>{variant.stock || "0"}</TableCell>}
                             <TableCell>
                               <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">{variant.sku}</code>
                             </TableCell>
@@ -2108,18 +2240,23 @@ export default function ProductsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col space-y-1">
-                            <span className="font-medium text-slate-800">{product.stock} units</span>
-                            <span
-                              className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium w-fit ${getStockStatusColor(
-                                product.stock,
-                                product.lowStockAlert,
-                                product.allowBackorders,
-                              )}`}
-                            >
-                              {getStockStatusText(product.stock, product.lowStockAlert, product.allowBackorders)}
-                            </span>
-                          </div>
+                          {product.trackQuantity ? (
+                            <div className="flex flex-col space-y-1">
+                              <span className="font-medium text-slate-800">{product.stock || 0} units</span>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium w-fit ${getStockStatusColor(product)}`}
+                              >
+                                {getStockStatusText(product)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-gray-500 text-sm">Not tracked</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium w-fit bg-blue-50 text-blue-700 border border-blue-200">
+                                Not Tracked
+                              </span>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge
