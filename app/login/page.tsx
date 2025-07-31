@@ -29,14 +29,6 @@ import { Progress } from "@/components/ui/progress"
 import Image from "next/image"
 
 const shakeKeyframes = `
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-    20%, 40%, 60%, 80% { transform: translateX(4px); }
-  }
-  .animate-shake {
-    animation: shake 0.6s ease-in-out;
-  }
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;
   }
@@ -63,7 +55,6 @@ export default function LoginPage() {
   const [lastLoginTime, setLastLoginTime] = useState<string | null>(null)
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
-  const [showError, setShowError] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [fieldErrors, setFieldErrors] = useState({
     email: "",
@@ -72,32 +63,6 @@ export default function LoginPage() {
 
   const router = useRouter()
   const { toast } = useToast()
-
-  // Add this after the state declarations
-  const testNotifications = () => {
-    console.log("🧪 Testing notification system...")
-
-    // Test toast
-    toast({
-      title: "🧪 Test Notification",
-      description: "This is a test notification to verify the system works",
-      variant: "destructive",
-    })
-
-    // Test field errors
-    setFieldErrors({
-      email: "Test email error",
-      password: "Test password error",
-    })
-
-    // Test shake animation
-    triggerShakeAnimation()
-
-    // Test error message
-    setErrorMessage("Test error message for debugging")
-
-    console.log("🧪 All test notifications triggered")
-  }
 
   const features = [
     {
@@ -226,11 +191,6 @@ export default function LoginPage() {
     localStorage.setItem("lastLoginTime", new Date().toLocaleString())
   }
 
-  const triggerShakeAnimation = () => {
-    setShowError(true)
-    setTimeout(() => setShowError(false), 600)
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -345,10 +305,6 @@ export default function LoginPage() {
 
         console.log("🔢 Login attempt count:", newAttempts)
 
-        // Trigger shake animation
-        triggerShakeAnimation()
-        console.log("🔄 Triggered shake animation")
-
         let errorMessage = "Invalid credentials. Please try again."
         let specificFieldError = ""
 
@@ -426,9 +382,6 @@ export default function LoginPage() {
         stack: error.stack,
       })
 
-      triggerShakeAnimation()
-      console.log("🔄 Triggered shake animation for network error")
-
       setErrorMessage("Unable to connect to the server. Please check your connection.")
       console.log("💬 Network error message set")
 
@@ -489,9 +442,7 @@ export default function LoginPage() {
       {/* Main Content */}
       <div className="flex items-center justify-center p-4 min-h-[calc(100vh-120px)]">
         <div className="w-full max-w-md">
-          <Card
-            className={`bg-white/95 backdrop-blur-sm shadow-2xl border border-gray-200 transition-all duration-300 hover:shadow-3xl ${showError ? "animate-shake" : ""}`}
-          >
+          <Card className="bg-white/95 backdrop-blur-sm shadow-2xl border border-gray-200 transition-all duration-300 hover:shadow-3xl">
             <CardHeader className="text-center pb-6 space-y-4">
               {/* Welcome Back Message */}
               {showWelcomeBack && (
@@ -544,15 +495,6 @@ export default function LoginPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Add this button temporarily in the form for testing (remove after debugging) */}
-                <Button
-                  type="button"
-                  onClick={testNotifications}
-                  variant="outline"
-                  className="w-full mb-4 bg-transparent"
-                >
-                  🧪 Test Notifications (Debug Only)
-                </Button>
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium text-slate-700 flex items-center">
                     <Mail className="w-4 h-4 mr-2 text-slate-500" />
