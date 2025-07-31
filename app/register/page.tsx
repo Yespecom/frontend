@@ -344,29 +344,61 @@ export default function RegisterPage() {
     }
 
     setIsLoading(true)
+
+    // Clean phone number for API
+    const cleanPhone = formData.phone.replace(/\D/g, "")
+
+    const requestPayload = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: cleanPhone,
+      password: formData.password,
+    }
+
     try {
-      console.log("🚀 Sending OTP request to:", `${API_BASE_URL}/api/auth/register/initiate`)
+      console.log("🔧 API_BASE_URL:", API_BASE_URL)
+      console.log("🚀 Full URL:", `${API_BASE_URL}/api/auth/register/initiate`)
+      console.log("📝 Request payload:", {
+        ...requestPayload,
+        password: "***hidden***",
+      })
 
       const response = await fetch(`${API_BASE_URL}/api/auth/register/initiate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone.replace(/\D/g, ""), // Send clean phone number
-          password: formData.password,
-        }),
+        body: JSON.stringify(requestPayload),
       })
 
-      const responseText = await response.text()
-      let data: ApiResponse
+      console.log("📊 Response status:", response.status)
+      console.log("📊 Response ok:", response.ok)
+      console.log("📋 Response headers:", Object.fromEntries(response.headers.entries()))
 
+      // Get response text first
+      const responseText = await response.text()
+      console.log("📄 Raw response:", responseText)
+
+      // Handle empty response
+      if (!responseText) {
+        throw new Error("Empty response from server")
+      }
+
+      let data: ApiResponse
       try {
         data = JSON.parse(responseText)
+        console.log("✅ Parsed response data:", data)
       } catch (parseError) {
-        if (responseText.includes("OTP") || response.status === 200) {
+        console.error("❌ JSON Parse Error:", parseError)
+        console.log("🔍 Response was:", responseText)
+
+        // Check if response indicates success despite parse error
+        if (
+          response.ok ||
+          responseText.toLowerCase().includes("success") ||
+          responseText.toLowerCase().includes("otp")
+        ) {
           toast({
             title: "✨ Verification code sent!",
             description: "Check your email for the 6-digit code.",
@@ -376,9 +408,11 @@ export default function RegisterPage() {
           setTimeout(() => otpInputRef.current?.focus(), 100)
           return
         }
-        throw new Error("Invalid response from server")
+
+        throw new Error(`Invalid JSON response: ${responseText}`)
       }
 
+      // Check for success
       const isSuccess =
         response.ok &&
         (data.success === true || data.success === "true" || response.status === 200 || response.status === 201)
@@ -392,7 +426,28 @@ export default function RegisterPage() {
         setCountdown(60)
         setTimeout(() => otpInputRef.current?.focus(), 100)
       } else {
-        const errorMessage = handleApiError(response, data)
+        // Enhanced error handling
+        let errorMessage = "Failed to send verification code"
+
+        if (response.status === 400) {
+          errorMessage = data?.error || data?.message || "Invalid request. Please check your information."
+        } else if (response.status === 409) {
+          errorMessage = "An account with this email already exists. Please try logging in."
+        } else if (response.status === 422) {
+          errorMessage = "Please check your information and try again."
+        } else if (response.status >= 500) {
+          errorMessage = "Server error. Please try again later."
+        } else {
+          errorMessage = data?.error || data?.message || `Server returned ${response.status}`
+        }
+
+        console.error("❌ API Error:", {
+          status: response.status,
+          error: data?.error || "No error field",
+          message: data?.message || "No message field",
+          fullResponse: data || "No data",
+        })
+
         toast({
           title: "Failed to send verification code",
           description: errorMessage,
@@ -400,10 +455,22 @@ export default function RegisterPage() {
         })
       }
     } catch (error) {
-      console.error("❌ Send OTP error:", error)
+      console.error("❌ Network/Request Error:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : "No stack trace",
+        type: typeof error,
+      })
+
+      let errorMessage = "Connection error. Please try again."
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        errorMessage = "Unable to connect to server. Please check your internet connection."
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+
       toast({
         title: "Connection Error",
-        description: "Unable to connect to the server. Please check your internet connection.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -423,30 +490,54 @@ export default function RegisterPage() {
     }
 
     setIsLoading(true)
+
+    const requestPayload = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: formData.phone.replace(/\D/g, ""),
+      password: formData.password,
+      otp: otp,
+    }
+
     try {
-      const requestPayload = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone.replace(/\D/g, ""), // Send clean phone number
-        password: formData.password,
-        otp: otp,
-      }
+      console.log("🚀 Verify OTP URL:", `${API_BASE_URL}/api/auth/register/complete`)
+      console.log("📝 Verify payload:", {
+        ...requestPayload,
+        password: "***hidden***",
+      })
 
       const response = await fetch(`${API_BASE_URL}/api/auth/register/complete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
         body: JSON.stringify(requestPayload),
       })
 
-      const responseText = await response.text()
-      let data: ApiResponse
+      console.log("📊 Verify Response status:", response.status)
+      console.log("📊 Verify Response ok:", response.ok)
 
+      const responseText = await response.text()
+      console.log("📄 Verify Raw response:", responseText)
+
+      if (!responseText) {
+        throw new Error("Empty response from server")
+      }
+
+      let data: ApiResponse
       try {
         data = JSON.parse(responseText)
+        console.log("✅ Verify Parsed response:", data)
       } catch (parseError) {
-        if (responseText.includes("success") || responseText.includes("token")) {
+        console.error("❌ Verify JSON Parse Error:", parseError)
+
+        // Check for success indicators in raw response
+        if (
+          response.ok ||
+          responseText.toLowerCase().includes("success") ||
+          responseText.toLowerCase().includes("token")
+        ) {
           toast({
             title: "🎉 Welcome to Yesp Ecom Studio!",
             description: "Your account has been created successfully.",
@@ -454,25 +545,16 @@ export default function RegisterPage() {
           router.push("/setup-store")
           return
         }
-        throw new Error("Invalid response from server")
+
+        throw new Error(`Invalid JSON response: ${responseText}`)
       }
 
-      if (data.code === "NO_PENDING_REGISTRATION" && data.error?.includes("No pending registration found")) {
-        toast({
-          title: "🎉 Welcome to Yesp Ecom Studio!",
-          description: "Your account has been created successfully.",
-        })
-        localStorage.setItem("userName", formData.name)
-        localStorage.setItem("userEmail", formData.email)
-        router.push("/setup-store")
-        return
-      }
-
-      const hasSuccessData = data.token || data.tenantId || data.message?.includes("success")
+      // Handle various success scenarios
       const isSuccess =
-        response.ok || response.status === 200 || response.status === 201 || data.success || hasSuccessData
+        response.ok || response.status === 200 || response.status === 201 || data.success || data.token || data.tenantId
 
       if (isSuccess) {
+        // Store tokens if provided
         if (data.token) localStorage.setItem("token", data.token)
         if (data.tenantId) localStorage.setItem("tenantId", data.tenantId)
 
@@ -485,16 +567,25 @@ export default function RegisterPage() {
         })
         router.push("/setup-store")
       } else {
-        if (responseText.includes("verified successfully") || responseText.includes("OTP verified")) {
-          toast({
-            title: "🎉 Welcome to Yesp Ecom Studio!",
-            description: "Your account has been created successfully.",
-          })
-          router.push("/setup-store")
-          return
+        let errorMessage = "Verification failed"
+
+        if (response.status === 400) {
+          errorMessage = data?.error || data?.message || "Invalid OTP code. Please try again."
+        } else if (response.status === 401) {
+          errorMessage = "Invalid or expired OTP. Please request a new code."
+        } else if (response.status === 404) {
+          errorMessage = "Registration session not found. Please start over."
+        } else {
+          errorMessage = data?.error || data?.message || `Server returned ${response.status}`
         }
 
-        const errorMessage = handleApiError(response, data)
+        console.error("❌ Verify API Error:", {
+          status: response.status,
+          error: data?.error || "No error field",
+          message: data?.message || "No message field",
+          fullResponse: data || "No data",
+        })
+
         toast({
           title: "Verification failed",
           description: errorMessage,
@@ -502,7 +593,12 @@ export default function RegisterPage() {
         })
       }
     } catch (error) {
-      console.error("Registration error:", error)
+      console.error("❌ Verify Network Error:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : "No stack trace",
+        type: typeof error,
+      })
+
       toast({
         title: "Connection Error",
         description: "Unable to connect to the server. Please try again.",
