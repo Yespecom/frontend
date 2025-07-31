@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,23 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Eye, EyeOff, Store, Mail, User, Phone, Lock, Shield, CheckCircle } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import {
+  Eye,
+  EyeOff,
+  Store,
+  Mail,
+  User,
+  Phone,
+  Lock,
+  Shield,
+  CheckCircle,
+  AlertCircle,
+  Check,
+  Loader2,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 
@@ -21,6 +37,15 @@ interface FormData {
   phone: string
   password: string
   confirmPassword: string
+}
+
+interface ValidationErrors {
+  name?: string
+  email?: string
+  phone?: string
+  password?: string
+  confirmPassword?: string
+  terms?: string
 }
 
 interface ApiResponse {
@@ -53,12 +78,16 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
+  const [fieldTouched, setFieldTouched] = useState<Record<string, boolean>>({})
+  const [formProgress, setFormProgress] = useState(0)
+
   const router = useRouter()
   const { toast } = useToast()
+  const otpInputRef = useRef<HTMLInputElement>(null)
 
   // Countdown timer for resend OTP
   const timer = React.useRef<NodeJS.Timeout | null>(null)
-
   React.useEffect(() => {
     if (countdown > 0) {
       timer.current = setTimeout(() => setCountdown(countdown - 1), 1000)
@@ -70,118 +99,201 @@ export default function RegisterPage() {
     }
   }, [countdown])
 
-  // Validation functions
-  const validateEmail = (email: string): boolean => {
+  // Calculate form progress
+  React.useEffect(() => {
+    const fields = [formData.name, formData.email, formData.phone, formData.password, formData.confirmPassword]
+    const filledFields = fields.filter((field) => field.trim() !== "").length
+    const progress = (filledFields / fields.length) * 100
+    setFormProgress(progress)
+  }, [formData])
+
+  // Enhanced validation functions
+  const validateEmail = (email: string): string | null => {
+    if (!email.trim()) return "Email is required"
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
+    if (!emailRegex.test(email)) return "Please enter a valid email address"
+    return null
   }
 
-  const validatePhone = (phone: string): boolean => {
-    const phoneRegex = /^[+]?[1-9][\d]{0,15}$/
-    return phoneRegex.test(phone.replace(/\s/g, ""))
+  const validatePhone = (phone: string): string | null => {
+    if (!phone.trim()) return "Phone number is required"
+    const cleanPhone = phone.replace(/\D/g, "")
+    if (cleanPhone.length < 10) return "Phone number must be at least 10 digits"
+    if (cleanPhone.length > 15) return "Phone number is too long"
+    if (!/^[+]?[1-9][\d]{9,14}$/.test(phone.replace(/\s/g, ""))) {
+      return "Please enter a valid phone number (e.g., +1234567890 or 1234567890)"
+    }
+    return null
   }
 
-  const validatePassword = (password: string): boolean => {
-    return password.length >= 6
+  const validatePassword = (password: string): string | null => {
+    if (!password) return "Password is required"
+    if (password.length < 6) return "Password must be at least 6 characters long"
+    if (!/(?=.*[a-z])/.test(password)) return "Password must contain at least one lowercase letter"
+    if (!/(?=.*[A-Z])/.test(password)) return "Password must contain at least one uppercase letter"
+    if (!/(?=.*\d)/.test(password)) return "Password must contain at least one number"
+    return null
   }
+
+  const validateName = (name: string): string | null => {
+    if (!name.trim()) return "Full name is required"
+    if (name.trim().length < 2) return "Name must be at least 2 characters long"
+    if (!/^[a-zA-Z\s]+$/.test(name)) return "Name can only contain letters and spaces"
+    return null
+  }
+
+  const validateConfirmPassword = (password: string, confirmPassword: string): string | null => {
+    if (!confirmPassword) return "Please confirm your password"
+    if (password !== confirmPassword) return "Passwords do not match"
+    return null
+  }
+
+  // Real-time validation
+  const validateField = useCallback(
+    (fieldName: keyof FormData, value: string) => {
+      let error: string | null = null
+
+      switch (fieldName) {
+        case "name":
+          error = validateName(value)
+          break
+        case "email":
+          error = validateEmail(value)
+          break
+        case "phone":
+          error = validatePhone(value)
+          break
+        case "password":
+          error = validatePassword(value)
+          break
+        case "confirmPassword":
+          error = validateConfirmPassword(formData.password, value)
+          break
+      }
+
+      setValidationErrors((prev) => ({
+        ...prev,
+        [fieldName]: error,
+      }))
+
+      return error === null
+    },
+    [formData.password],
+  )
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, value } = e.target
+
+      // Format phone number as user types
+      let formattedValue = value
+      if (name === "phone") {
+        // Remove all non-digits
+        const digits = value.replace(/\D/g, "")
+        // Format as needed (you can customize this)
+        if (digits.length <= 10) {
+          formattedValue = digits.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+        } else {
+          formattedValue = `+${digits.slice(0, -10)} (${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`
+        }
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        [name]: formattedValue,
+      }))
+
+      // Validate field if it has been touched
+      if (fieldTouched[name]) {
+        validateField(name as keyof FormData, formattedValue)
+      }
+    },
+    [fieldTouched, validateField],
+  )
+
+  const handleFieldBlur = useCallback(
+    (fieldName: string, value: string) => {
+      setFieldTouched((prev) => ({ ...prev, [fieldName]: true }))
+      validateField(fieldName as keyof FormData, value)
+    },
+    [validateField],
+  )
 
   const validateForm = (): boolean => {
-    if (!formData.name.trim()) {
-      toast({
-        title: "Name required",
-        description: "Please enter your full name.",
-        variant: "destructive",
-      })
-      return false
-    }
+    const errors: ValidationErrors = {}
 
-    if (!validateEmail(formData.email)) {
-      toast({
-        title: "Invalid email",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    if (!validatePhone(formData.phone)) {
-      toast({
-        title: "Invalid phone",
-        description: "Please enter a valid phone number.",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    if (!validatePassword(formData.password)) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 6 characters long.",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Password mismatch",
-        description: "Passwords do not match. Please try again.",
-        variant: "destructive",
-      })
-      return false
-    }
+    errors.name = validateName(formData.name)
+    errors.email = validateEmail(formData.email)
+    errors.phone = validatePhone(formData.phone)
+    errors.password = validatePassword(formData.password)
+    errors.confirmPassword = validateConfirmPassword(formData.password, formData.confirmPassword)
 
     if (!acceptTerms) {
-      toast({
-        title: "Terms required",
-        description: "Please accept the terms and conditions to continue.",
-        variant: "destructive",
-      })
-      return false
+      errors.terms = "Please accept the terms and conditions to continue"
     }
 
-    return true
-  }
+    setValidationErrors(errors)
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }))
-  }, [])
+    // Check if any errors exist
+    const hasErrors = Object.values(errors).some((error) => error !== null)
+    return !hasErrors
+  }
 
   const handleApiError = (response: Response, data: ApiResponse): string => {
     let errorMessage = "Something went wrong. Please try again."
-
     if (response.status === 400) {
       errorMessage = data.error || data.message || "Invalid request data."
     } else if (response.status === 401) {
       errorMessage = "Invalid or expired OTP. Please try again."
     } else if (response.status === 409) {
-      errorMessage = "User already exists with this email."
+      errorMessage = "An account with this email already exists. Please try logging in instead."
     } else if (response.status === 422) {
-      errorMessage = "Validation failed. Please check your input."
+      errorMessage = "Please check your information and try again."
     } else if (response.status === 500) {
       errorMessage = "Server error. Please try again later."
     }
-
     return errorMessage
   }
 
-  // Updated to use the correct API endpoint: POST /api/register/initiate
+  // Enhanced OTP input handling
+  const handleOtpChange = (value: string) => {
+    // Only allow digits and limit to 6 characters
+    const cleanValue = value.replace(/\D/g, "").slice(0, 6)
+    setOtp(cleanValue)
+  }
+
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Allow backspace, delete, tab, escape, enter
+    if (
+      [8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+      // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+      (e.keyCode === 65 && e.ctrlKey === true) ||
+      (e.keyCode === 67 && e.ctrlKey === true) ||
+      (e.keyCode === 86 && e.ctrlKey === true) ||
+      (e.keyCode === 88 && e.ctrlKey === true)
+    ) {
+      return
+    }
+    // Ensure that it is a number and stop the keypress
+    if ((e.shiftKey || e.keyCode < 48 || e.keyCode > 57) && (e.keyCode < 96 || e.keyCode > 105)) {
+      e.preventDefault()
+    }
+  }
+
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validateForm()) return
+    if (!validateForm()) {
+      toast({
+        title: "Please fix the errors below",
+        description: "Check all fields and try again.",
+        variant: "destructive",
+      })
+      return
+    }
 
     setIsLoading(true)
     try {
       console.log("🚀 Sending OTP request to:", `${API_BASE_URL}/api/auth/register/initiate`)
-      console.log("📝 Request payload:", {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        password: "***hidden***",
-      })
 
       const response = await fetch(`${API_BASE_URL}/api/auth/register/initiate`, {
         method: "POST",
@@ -191,69 +303,46 @@ export default function RegisterPage() {
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
-          phone: formData.phone,
+          phone: formData.phone.replace(/\D/g, ""), // Send clean phone number
           password: formData.password,
         }),
       })
 
-      console.log("📊 Response status:", response.status)
-      console.log("📋 Response headers:", Object.fromEntries(response.headers.entries()))
-
       const responseText = await response.text()
-      console.log("📄 Raw response text:", responseText)
-
       let data: ApiResponse
+
       try {
         data = JSON.parse(responseText)
-        console.log("✅ Parsed response data:", data)
       } catch (parseError) {
-        console.error("❌ Failed to parse JSON response:", parseError)
-        console.log("🔍 Response was:", responseText)
-
-        // If the server logs show OTP was created successfully,
-        // but we can't parse the response, let's proceed anyway
         if (responseText.includes("OTP") || response.status === 200) {
-          console.log("🎯 Detected successful OTP creation from server logs, proceeding...")
           toast({
-            title: "OTP Sent!",
-            description: "Please check your email for the verification code.",
+            title: "✨ Verification code sent!",
+            description: "Check your email for the 6-digit code.",
           })
           setStep("verify")
           setCountdown(60)
+          setTimeout(() => otpInputRef.current?.focus(), 100)
           return
         }
-
-        throw new Error("Invalid JSON response from server")
+        throw new Error("Invalid response from server")
       }
 
-      // Check for success in multiple ways since your API might return different formats
       const isSuccess =
         response.ok &&
         (data.success === true || data.success === "true" || response.status === 200 || response.status === 201)
 
-      console.log("🔍 Success check:", {
-        responseOk: response.ok,
-        dataSuccess: data.success,
-        status: response.status,
-        isSuccess,
-      })
-
       if (isSuccess) {
-        console.log("✅ OTP sent successfully!")
         toast({
-          title: "OTP Sent!",
-          description: "Please check your email for the verification code.",
+          title: "✨ Verification code sent!",
+          description: "Check your email for the 6-digit code.",
         })
-        console.log("🔄 Setting step to verify...")
         setStep("verify")
         setCountdown(60)
+        setTimeout(() => otpInputRef.current?.focus(), 100)
       } else {
-        console.log("❌ API returned error response")
         const errorMessage = handleApiError(response, data)
-        console.error("API Error:", errorMessage)
-        console.log("🔍 Full error details:", { response: response.status, data })
         toast({
-          title: "Failed to send OTP",
+          title: "Failed to send verification code",
           description: errorMessage,
           variant: "destructive",
         })
@@ -270,13 +359,12 @@ export default function RegisterPage() {
     }
   }
 
-  // Updated to use the correct API endpoint: POST /api/register/complete
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     if (otp.length !== 6) {
       toast({
-        title: "Invalid OTP",
-        description: "Please enter a valid 6-digit OTP.",
+        title: "Invalid verification code",
+        description: "Please enter the complete 6-digit code.",
         variant: "destructive",
       })
       return
@@ -287,16 +375,10 @@ export default function RegisterPage() {
       const requestPayload = {
         name: formData.name,
         email: formData.email,
-        phone: formData.phone,
+        phone: formData.phone.replace(/\D/g, ""), // Send clean phone number
         password: formData.password,
         otp: otp,
       }
-
-      console.log("🚀 Sending verification request to:", `${API_BASE_URL}/api/auth/register/complete`)
-      console.log("📝 Request payload:", {
-        ...requestPayload,
-        password: "***hidden***",
-      })
 
       const response = await fetch(`${API_BASE_URL}/api/auth/register/complete`, {
         method: "POST",
@@ -306,127 +388,55 @@ export default function RegisterPage() {
         body: JSON.stringify(requestPayload),
       })
 
-      console.log("📊 Response status:", response.status)
-      console.log("📋 Response headers:", Object.fromEntries(response.headers.entries()))
-
       const responseText = await response.text()
-      console.log("📄 Raw response text:", responseText)
-
       let data: ApiResponse
+
       try {
         data = JSON.parse(responseText)
-        console.log("✅ Parsed response data:", data)
       } catch (parseError) {
-        console.error("❌ Failed to parse JSON response:", parseError)
-        console.log("🔍 Response was:", responseText)
-
-        // If we can't parse JSON but server logs show success, proceed anyway
         if (responseText.includes("success") || responseText.includes("token")) {
-          console.log("🎯 Detected success indicators in response, proceeding...")
           toast({
-            title: "Account created!",
-            description: "Welcome to Yesp Ecom Studio. Let's set up your store.",
+            title: "🎉 Welcome to Yesp Ecom Studio!",
+            description: "Your account has been created successfully.",
           })
           router.push("/setup-store")
           return
         }
-
-        throw new Error("Invalid JSON response from server")
+        throw new Error("Invalid response from server")
       }
 
-      console.log("🔍 Verify OTP Response:", {
-        status: response.status,
-        ok: response.ok,
-        data: data,
-      })
-
-      // Handle the specific case where OTP was verified but pending registration was already deleted
       if (data.code === "NO_PENDING_REGISTRATION" && data.error?.includes("No pending registration found")) {
-        console.log(
-          "🎯 Detected 'NO_PENDING_REGISTRATION' - this likely means OTP was verified successfully but registration was already processed",
-        )
-
-        // Since your server logs show successful user creation, let's proceed
         toast({
-          title: "Account created!",
-          description: "Welcome to Yesp Ecom Studio. Let's set up your store.",
+          title: "🎉 Welcome to Yesp Ecom Studio!",
+          description: "Your account has been created successfully.",
         })
-
-        // Store basic user data
         localStorage.setItem("userName", formData.name)
         localStorage.setItem("userEmail", formData.email)
-
-        console.log("🏪 Redirecting to store setup...")
         router.push("/setup-store")
         return
       }
 
-      // Since your server logs show OTP verification is successful,
-      // but API returns 400, let's check if the response contains success data
       const hasSuccessData = data.token || data.tenantId || data.message?.includes("success")
-
-      // Check for success - your API might return different success indicators
       const isSuccess =
-        response.ok ||
-        response.status === 200 ||
-        response.status === 201 ||
-        data.success ||
-        hasSuccessData ||
-        // Handle the case where registration was successful but pending record was already deleted
-        (data.code === "NO_PENDING_REGISTRATION" && responseText.includes("verified successfully"))
-
-      console.log("🔍 Success indicators:", {
-        responseOk: response.ok,
-        status: response.status,
-        dataSuccess: data.success,
-        hasSuccessData,
-        isSuccess,
-      })
+        response.ok || response.status === 200 || response.status === 201 || data.success || hasSuccessData
 
       if (isSuccess) {
-        console.log("✅ Registration completed successfully!")
+        if (data.token) localStorage.setItem("token", data.token)
+        if (data.tenantId) localStorage.setItem("tenantId", data.tenantId)
 
-        // Store authentication data
-        if (data.token) {
-          localStorage.setItem("token", data.token)
-          console.log("🔑 Token stored")
-        }
-        if (data.tenantId) {
-          localStorage.setItem("tenantId", data.tenantId)
-          console.log("🏢 Tenant ID stored")
-        }
-
-        // Store user data
         localStorage.setItem("userName", formData.name)
         localStorage.setItem("userEmail", formData.email)
-        console.log("👤 User data stored")
 
-        // Based on your server logs, it looks like a new user always needs store setup
         toast({
-          title: "Account created!",
-          description: "Welcome to Yesp Ecom Studio. Let's set up your store.",
+          title: "🎉 Welcome to Yesp Ecom Studio!",
+          description: "Your account has been created successfully.",
         })
-
-        console.log("🏪 Redirecting to store setup...")
         router.push("/setup-store")
       } else {
-        console.log("❌ Registration failed")
-        console.log("🔍 Full error details:", {
-          response: response.status,
-          data,
-          errorMessage: data.error || data.message,
-        })
-
-        // If server logs show success but API returns error, let's proceed anyway
-        if (
-          responseText.includes("verified successfully") ||
-          responseText.includes("OTP verified") ||
-          data.message?.includes("verified")
-        ) {
-          console.log("🎯 Server logs indicate success, proceeding despite API error...")
+        if (responseText.includes("verified successfully") || responseText.includes("OTP verified")) {
           toast({
-            title: "Account created!",
-            description: "Welcome to Yesp Ecom Studio. Let's set up your store.",
+            title: "🎉 Welcome to Yesp Ecom Studio!",
+            description: "Your account has been created successfully.",
           })
           router.push("/setup-store")
           return
@@ -434,7 +444,7 @@ export default function RegisterPage() {
 
         const errorMessage = handleApiError(response, data)
         toast({
-          title: "Registration failed",
+          title: "Verification failed",
           description: errorMessage,
           variant: "destructive",
         })
@@ -451,10 +461,8 @@ export default function RegisterPage() {
     }
   }
 
-  // Updated to use the correct API endpoint: POST /api/otp/resend
   const handleResendOTP = async () => {
     if (countdown > 0) return
-
     setResendLoading(true)
     try {
       const response = await fetch(`${API_BASE_URL}/api/otp/request`, {
@@ -467,20 +475,19 @@ export default function RegisterPage() {
           purpose: "registration",
         }),
       })
-
       const data: ApiResponse = await response.json()
-
       if (response.ok && data.success) {
         toast({
-          title: "OTP Resent!",
-          description: "A new verification code has been sent to your email.",
+          title: "✨ New code sent!",
+          description: "A fresh verification code has been sent to your email.",
         })
         setCountdown(60)
         setOtp("")
+        otpInputRef.current?.focus()
       } else {
         toast({
           title: "Error",
-          description: data.error || data.message || "Failed to resend OTP. Please try again.",
+          description: data.error || data.message || "Failed to resend code. Please try again.",
           variant: "destructive",
         })
       }
@@ -495,20 +502,50 @@ export default function RegisterPage() {
     }
   }
 
+  // Helper component for input validation display
+  const InputValidation = ({ error, success }: { error?: string; success?: boolean }) => {
+    if (error) {
+      return (
+        <div className="flex items-center mt-1 text-red-600">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          <span className="text-xs">{error}</span>
+        </div>
+      )
+    }
+    if (success) {
+      return (
+        <div className="flex items-center mt-1 text-green-600">
+          <Check className="w-3 h-3 mr-1" />
+          <span className="text-xs">Looks good!</span>
+        </div>
+      )
+    }
+    return null
+  }
+
   // Render verification step
   if (step === "verify") {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         {/* Brand Header */}
-        <div className="w-full py-6 px-4 border-b border-gray-100">
+        <div className="w-full py-6 px-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto">
             <Link href="/" className="flex items-center space-x-4">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                <Image src="/logo.png" alt="Yesp Ecom Studio Logo" width={40} height={40} className="w-10 h-10" />
+                <Image
+                  src="/placeholder.svg?height=40&width=40&text=Logo"
+                  alt="Yesp Ecom Studio Logo"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10"
+                />
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-slate-900">Yesp Ecom Studio</span>
-                <Badge className="bg-green-50 text-green-700 border-green-200 text-xs w-fit">Beta Available</Badge>
+                <Badge className="bg-green-50 text-green-700 border-green-200 text-xs w-fit">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Beta Available
+                </Badge>
               </div>
             </Link>
           </div>
@@ -517,15 +554,15 @@ export default function RegisterPage() {
         {/* Main Content */}
         <div className="flex items-center justify-center p-4 min-h-[calc(100vh-120px)]">
           <div className="w-full max-w-md">
-            <Card className="bg-white shadow-xl border border-gray-200">
+            <Card className="bg-white/90 backdrop-blur-sm shadow-2xl border border-gray-200">
               <CardHeader className="text-center pb-6 space-y-4">
                 <div className="flex items-center justify-center space-x-3 mb-4">
-                  <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 bg-gradient-to-r from-slate-900 to-slate-700 rounded-xl flex items-center justify-center shadow-lg">
                     <Shield className="w-7 h-7 text-white" />
                   </div>
                   <div className="text-left">
                     <span className="text-2xl font-bold text-slate-900">Verify Email</span>
-                    <p className="text-sm text-slate-600 -mt-1">Almost there!</p>
+                    <p className="text-sm text-slate-600 -mt-1">Almost there! 🎉</p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -543,62 +580,39 @@ export default function RegisterPage() {
                       Verification Code
                     </Label>
                     <div className="flex justify-center">
-                      {/* Alternative OTP Input using regular inputs */}
-                      <div className="flex gap-2">
-                        {[0, 1, 2, 3, 4, 5].map((index) => (
-                          <Input
-                            key={index}
-                            type="text"
-                            maxLength={1}
-                            className="w-12 h-12 text-center text-lg border-2 border-gray-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 rounded-lg"
-                            value={otp[index] || ""}
-                            onChange={(e) => {
-                              const newOtp = otp.split("")
-                              newOtp[index] = e.target.value
-                              const updatedOtp = newOtp.join("")
-                              setOtp(updatedOtp)
-
-                              // Auto-focus next input
-                              if (e.target.value && index < 5) {
-                                const nextInput = e.target.parentElement?.nextElementSibling?.querySelector(
-                                  "input",
-                                ) as HTMLInputElement
-                                nextInput?.focus()
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              // Handle backspace
-                              if (e.key === "Backspace" && !otp[index] && index > 0) {
-                                const prevInput = e.target.parentElement?.previousElementSibling?.querySelector(
-                                  "input",
-                                ) as HTMLInputElement
-                                prevInput?.focus()
-                              }
-                            }}
-                          />
-                        ))}
-                      </div>
+                      <Input
+                        ref={otpInputRef}
+                        type="text"
+                        placeholder="000000"
+                        value={otp}
+                        onChange={(e) => handleOtpChange(e.target.value)}
+                        onKeyDown={handleOtpKeyDown}
+                        className="w-48 h-14 text-center text-2xl font-mono tracking-widest border-2 border-gray-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 rounded-lg"
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                      />
                     </div>
-                    {/* Debug info */}
-                    <div className="text-center text-xs text-gray-500">
-                      Current OTP: {otp} (Length: {otp.length})
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-2">{otp.length}/6 digits entered</div>
+                      <Progress value={(otp.length / 6) * 100} className="w-48 mx-auto h-1" />
                     </div>
                   </div>
 
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+                    className="w-full h-12 bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
                     disabled={isLoading || otp.length !== 6}
                   >
                     {isLoading ? (
                       <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                        <Loader2 className="animate-spin h-4 w-4 mr-2" />
                         Creating Account...
                       </div>
                     ) : (
                       <div className="flex items-center">
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Verify & Create Account
+                        <ArrowRight className="w-4 h-4 ml-2" />
                       </div>
                     )}
                   </Button>
@@ -614,13 +628,16 @@ export default function RegisterPage() {
                   >
                     {resendLoading ? (
                       <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-slate-600 border-t-transparent mr-2"></div>
+                        <Loader2 className="animate-spin h-3 w-3 mr-2" />
                         Sending...
                       </div>
                     ) : countdown > 0 ? (
                       `Resend in ${countdown}s`
                     ) : (
-                      "Resend code"
+                      <div className="flex items-center">
+                        <Mail className="w-4 h-4 mr-2" />
+                        Resend code
+                      </div>
                     )}
                   </Button>
                 </div>
@@ -644,17 +661,26 @@ export default function RegisterPage() {
 
   // Render registration step
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Brand Header */}
-      <div className="w-full py-6 px-4 border-b border-gray-100">
+      <div className="w-full py-6 px-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">
           <Link href="/" className="flex items-center space-x-4">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-              <Image src="/logo.png" alt="Yesp Ecom Studio Logo" width={40} height={40} className="w-10 h-10" />
+              <Image
+                src="/placeholder.svg?height=40&width=40&text=Logo"
+                alt="Yesp Ecom Studio Logo"
+                width={40}
+                height={40}
+                className="w-10 h-10"
+              />
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-bold text-slate-900">Yesp Ecom Studio</span>
-              <Badge className="bg-green-50 text-green-700 border-green-200 text-xs w-fit">Beta Available</Badge>
+              <Badge className="bg-green-50 text-green-700 border-green-200 text-xs w-fit">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Beta Available
+              </Badge>
             </div>
           </Link>
         </div>
@@ -663,15 +689,15 @@ export default function RegisterPage() {
       {/* Main Content */}
       <div className="flex items-center justify-center p-4 min-h-[calc(100vh-120px)]">
         <div className="w-full max-w-md">
-          <Card className="bg-white shadow-xl border border-gray-200">
+          <Card className="bg-white/90 backdrop-blur-sm shadow-2xl border border-gray-200">
             <CardHeader className="text-center pb-6 space-y-4">
               <div className="flex items-center justify-center space-x-3 mb-4">
-                <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+                <div className="w-12 h-12 bg-gradient-to-r from-slate-900 to-slate-700 rounded-xl flex items-center justify-center shadow-lg">
                   <Store className="w-7 h-7 text-white" />
                 </div>
                 <div className="text-left">
                   <span className="text-2xl font-bold text-slate-900">Join Us</span>
-                  <p className="text-sm text-slate-600 -mt-1">Create your account</p>
+                  <p className="text-sm text-slate-600 -mt-1">Create your account ✨</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -680,77 +706,146 @@ export default function RegisterPage() {
                   Start your ecommerce journey today and build your dream store
                 </CardDescription>
               </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>Progress</span>
+                  <span>{Math.round(formProgress)}% complete</span>
+                </div>
+                <Progress value={formProgress} className="h-2" />
+              </div>
             </CardHeader>
 
             <CardContent className="space-y-6">
               <form onSubmit={handleSendOTP} className="space-y-4">
+                {/* Name Field */}
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-sm font-medium text-slate-700 flex items-center">
                     <User className="w-4 h-4 mr-2 text-slate-500" />
-                    Full name
+                    Full name *
                   </Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    required
-                    className="h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white transition-all duration-200"
+                  <div className="relative">
+                    <Input
+                      id="name"
+                      name="name"
+                      type="text"
+                      placeholder="Enter your full name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      onBlur={(e) => handleFieldBlur("name", e.target.value)}
+                      required
+                      className={`h-11 border-2 transition-all duration-200 ${
+                        validationErrors.name
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : fieldTouched.name && !validationErrors.name
+                            ? "border-green-300 focus:border-green-500 focus:ring-green-500/20"
+                            : "border-gray-300 focus:border-slate-500 focus:ring-slate-500/20"
+                      } bg-white`}
+                    />
+                    {fieldTouched.name && !validationErrors.name && (
+                      <Check className="absolute right-3 top-3 w-5 h-5 text-green-500" />
+                    )}
+                  </div>
+                  <InputValidation
+                    error={validationErrors.name}
+                    success={fieldTouched.name && !validationErrors.name}
                   />
                 </div>
 
+                {/* Email Field */}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium text-slate-700 flex items-center">
                     <Mail className="w-4 h-4 mr-2 text-slate-500" />
-                    Email address
+                    Email address *
                   </Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                    className="h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white transition-all duration-200"
+                  <div className="relative">
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      onBlur={(e) => handleFieldBlur("email", e.target.value)}
+                      required
+                      className={`h-11 border-2 transition-all duration-200 ${
+                        validationErrors.email
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : fieldTouched.email && !validationErrors.email
+                            ? "border-green-300 focus:border-green-500 focus:ring-green-500/20"
+                            : "border-gray-300 focus:border-slate-500 focus:ring-slate-500/20"
+                      } bg-white`}
+                    />
+                    {fieldTouched.email && !validationErrors.email && (
+                      <Check className="absolute right-3 top-3 w-5 h-5 text-green-500" />
+                    )}
+                  </div>
+                  <InputValidation
+                    error={validationErrors.email}
+                    success={fieldTouched.email && !validationErrors.email}
                   />
                 </div>
 
+                {/* Phone Field */}
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-sm font-medium text-slate-700 flex items-center">
                     <Phone className="w-4 h-4 mr-2 text-slate-500" />
-                    Phone number
+                    Phone number *
                   </Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    required
-                    className="h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white transition-all duration-200"
+                  <div className="relative">
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      placeholder="(123) 456-7890 or +1234567890"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      onBlur={(e) => handleFieldBlur("phone", e.target.value)}
+                      required
+                      className={`h-11 border-2 transition-all duration-200 ${
+                        validationErrors.phone
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : fieldTouched.phone && !validationErrors.phone
+                            ? "border-green-300 focus:border-green-500 focus:ring-green-500/20"
+                            : "border-gray-300 focus:border-slate-500 focus:ring-slate-500/20"
+                      } bg-white`}
+                    />
+                    {fieldTouched.phone && !validationErrors.phone && (
+                      <Check className="absolute right-3 top-3 w-5 h-5 text-green-500" />
+                    )}
+                  </div>
+                  <InputValidation
+                    error={validationErrors.phone}
+                    success={fieldTouched.phone && !validationErrors.phone}
                   />
+                  <div className="text-xs text-slate-500">💡 Tip: Include country code for international numbers</div>
                 </div>
 
+                {/* Password Field */}
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-sm font-medium text-slate-700 flex items-center">
                     <Lock className="w-4 h-4 mr-2 text-slate-500" />
-                    Password
+                    Password *
                   </Label>
                   <div className="relative">
                     <Input
                       id="password"
                       name="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="Create a password (min 6 characters)"
+                      placeholder="Create a strong password"
                       value={formData.password}
                       onChange={handleInputChange}
+                      onBlur={(e) => handleFieldBlur("password", e.target.value)}
                       required
                       minLength={6}
-                      className="h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white pr-11 transition-all duration-200"
+                      className={`h-11 border-2 pr-11 transition-all duration-200 ${
+                        validationErrors.password
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : fieldTouched.password && !validationErrors.password
+                            ? "border-green-300 focus:border-green-500 focus:ring-green-500/20"
+                            : "border-gray-300 focus:border-slate-500 focus:ring-slate-500/20"
+                      } bg-white`}
                     />
                     <Button
                       type="button"
@@ -766,12 +861,54 @@ export default function RegisterPage() {
                       )}
                     </Button>
                   </div>
+                  <InputValidation
+                    error={validationErrors.password}
+                    success={fieldTouched.password && !validationErrors.password}
+                  />
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <div>Password must contain:</div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div
+                        className={`flex items-center ${formData.password.length >= 6 ? "text-green-600" : "text-slate-400"}`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full mr-2 ${formData.password.length >= 6 ? "bg-green-600" : "bg-slate-400"}`}
+                        />
+                        6+ characters
+                      </div>
+                      <div
+                        className={`flex items-center ${/(?=.*[a-z])/.test(formData.password) ? "text-green-600" : "text-slate-400"}`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full mr-2 ${/(?=.*[a-z])/.test(formData.password) ? "bg-green-600" : "bg-slate-400"}`}
+                        />
+                        Lowercase
+                      </div>
+                      <div
+                        className={`flex items-center ${/(?=.*[A-Z])/.test(formData.password) ? "text-green-600" : "text-slate-400"}`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full mr-2 ${/(?=.*[A-Z])/.test(formData.password) ? "bg-green-600" : "bg-slate-400"}`}
+                        />
+                        Uppercase
+                      </div>
+                      <div
+                        className={`flex items-center ${/(?=.*\d)/.test(formData.password) ? "text-green-600" : "text-slate-400"}`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full mr-2 ${/(?=.*\d)/.test(formData.password) ? "bg-green-600" : "bg-slate-400"}`}
+                        />
+                        Number
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
+                {/* Confirm Password Field */}
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700 flex items-center">
                     <Lock className="w-4 h-4 mr-2 text-slate-500" />
-                    Confirm password
+                    Confirm password *
                   </Label>
                   <div className="relative">
                     <Input
@@ -781,8 +918,15 @@ export default function RegisterPage() {
                       placeholder="Confirm your password"
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
+                      onBlur={(e) => handleFieldBlur("confirmPassword", e.target.value)}
                       required
-                      className="h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white pr-11 transition-all duration-200"
+                      className={`h-11 border-2 pr-11 transition-all duration-200 ${
+                        validationErrors.confirmPassword
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : fieldTouched.confirmPassword && !validationErrors.confirmPassword
+                            ? "border-green-300 focus:border-green-500 focus:ring-green-500/20"
+                            : "border-gray-300 focus:border-slate-500 focus:ring-slate-500/20"
+                      } bg-white`}
                     />
                     <Button
                       type="button"
@@ -798,65 +942,93 @@ export default function RegisterPage() {
                       )}
                     </Button>
                   </div>
+                  <InputValidation
+                    error={validationErrors.confirmPassword}
+                    success={fieldTouched.confirmPassword && !validationErrors.confirmPassword}
+                  />
                 </div>
 
-                <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <Checkbox
-                    id="terms"
-                    checked={acceptTerms}
-                    onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
-                    className="mt-0.5 border-slate-400 data-[state=checked]:bg-slate-600 data-[state=checked]:border-slate-600"
-                  />
-                  <Label htmlFor="terms" className="text-sm text-slate-600 leading-relaxed">
-                    I agree to the{" "}
-                    <Link href="/terms" className="text-slate-600 hover:text-slate-900 font-medium">
-                      Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link href="/privacy" className="text-slate-600 hover:text-slate-900 font-medium">
-                      Privacy Policy
-                    </Link>
-                  </Label>
+                {/* Terms and Conditions */}
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <Checkbox
+                      id="terms"
+                      checked={acceptTerms}
+                      onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                      className="mt-0.5 border-slate-400 data-[state=checked]:bg-slate-600 data-[state=checked]:border-slate-600"
+                    />
+                    <Label htmlFor="terms" className="text-sm text-slate-600 leading-relaxed">
+                      I agree to the{" "}
+                      <Link href="/terms" className="text-slate-600 hover:text-slate-900 font-medium underline">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/privacy" className="text-slate-600 hover:text-slate-900 font-medium underline">
+                        Privacy Policy
+                      </Link>
+                    </Label>
+                  </div>
+                  {validationErrors.terms && <InputValidation error={validationErrors.terms} />}
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+                  className="w-full h-12 bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                      Sending OTP...
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      Sending Verification Code...
                     </div>
                   ) : (
                     <div className="flex items-center">
                       <Mail className="w-4 h-4 mr-2" />
                       Send Verification Code
+                      <ArrowRight className="w-4 h-4 ml-2" />
                     </div>
                   )}
                 </Button>
               </form>
 
               {/* Features highlight */}
-              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg p-4 border border-slate-200">
                 <div className="flex items-center space-x-3">
                   <Store className="w-5 h-5 text-slate-600" />
                   <div>
-                    <p className="text-sm font-medium text-slate-900">What you'll get:</p>
+                    <p className="text-sm font-medium text-slate-900">🚀 What you'll get:</p>
                     <p className="text-xs text-slate-600">
-                      Free store setup • Payment processing • Analytics dashboard
+                      Free store setup • Payment processing • Analytics dashboard • 24/7 support
                     </p>
                   </div>
                 </div>
               </div>
+
+              {/* Trust indicators */}
+              <div className="flex items-center justify-center space-x-4 text-xs text-slate-500">
+                <div className="flex items-center">
+                  <Shield className="w-3 h-3 mr-1" />
+                  SSL Secured
+                </div>
+                <div className="flex items-center">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  GDPR Compliant
+                </div>
+                <div className="flex items-center">
+                  <Lock className="w-3 h-3 mr-1" />
+                  Data Protected
+                </div>
+              </div>
             </CardContent>
 
-            <CardFooter className="text-center bg-gray-50 rounded-b-lg">
+            <CardFooter className="text-center bg-gradient-to-r from-gray-50 to-slate-50 rounded-b-lg">
               <p className="text-sm text-slate-600">
                 Already have an account?{" "}
-                <Link href="/login" className="text-slate-600 hover:text-slate-900 font-medium transition-colors">
-                  Sign in
+                <Link
+                  href="/login"
+                  className="text-slate-600 hover:text-slate-900 font-medium transition-colors underline"
+                >
+                  Sign in →
                 </Link>
               </p>
             </CardFooter>
