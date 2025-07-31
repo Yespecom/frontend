@@ -28,6 +28,24 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import Image from "next/image"
 
+const shakeKeyframes = `
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+    20%, 40%, 60%, 80% { transform: translateX(4px); }
+  }
+  .animate-shake {
+    animation: shake 0.6s ease-in-out;
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+`
+
 export default function LoginPage() {
   const [formData, setFormData] = useState({
     email: "",
@@ -44,6 +62,13 @@ export default function LoginPage() {
   const [loginStreak, setLoginStreak] = useState(0)
   const [lastLoginTime, setLastLoginTime] = useState<string | null>(null)
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
+  const [loginAttempts, setLoginAttempts] = useState(0)
+  const [showError, setShowError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [fieldErrors, setFieldErrors] = useState({
+    email: "",
+    password: "",
+  })
 
   const router = useRouter()
   const { toast } = useToast()
@@ -76,12 +101,14 @@ export default function LoginPage() {
     const streak = localStorage.getItem("loginStreak")
     const lastLogin = localStorage.getItem("lastLoginTime")
     const userEmail = localStorage.getItem("userEmail")
+    const attempts = localStorage.getItem("loginAttempts")
 
     if (streak) setLoginStreak(Number.parseInt(streak))
     if (lastLogin) {
       setLastLoginTime(lastLogin)
       if (userEmail) setShowWelcomeBack(true)
     }
+    if (attempts) setLoginAttempts(Number.parseInt(attempts))
   }, [])
 
   // Feature carousel
@@ -173,10 +200,17 @@ export default function LoginPage() {
     localStorage.setItem("lastLoginTime", new Date().toLocaleString())
   }
 
+  const triggerShakeAnimation = () => {
+    setShowError(true)
+    setTimeout(() => setShowError(false), 600)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setLoginProgress(0)
+    setFieldErrors({ email: "", password: "" })
+    setErrorMessage("")
 
     // Animated progress
     const progressInterval = setInterval(() => {
@@ -212,6 +246,10 @@ export default function LoginPage() {
       console.log("Response data:", data)
 
       if (response.ok) {
+        // Reset login attempts on success
+        setLoginAttempts(0)
+        localStorage.removeItem("loginAttempts")
+
         // Update login streak
         updateLoginStreak()
 
@@ -266,28 +304,74 @@ export default function LoginPage() {
           router.push("/setup-store")
         }
       } else {
+        // Increment login attempts
+        const newAttempts = loginAttempts + 1
+        setLoginAttempts(newAttempts)
+        localStorage.setItem("loginAttempts", newAttempts.toString())
+
+        // Trigger shake animation
+        triggerShakeAnimation()
+
         let errorMessage = "Invalid credentials. Please try again."
+        let specificFieldError = ""
+
         if (response.status === 400) {
           errorMessage = data.message || data.error || "Invalid input data."
+          if (data.field === "email") {
+            specificFieldError = "email"
+            setFieldErrors((prev) => ({ ...prev, email: "Please check your email address" }))
+          } else if (data.field === "password") {
+            specificFieldError = "password"
+            setFieldErrors((prev) => ({ ...prev, password: "Please check your password" }))
+          }
         } else if (response.status === 401) {
           errorMessage = data.message || data.error || "Invalid email or password."
+          // Set both fields as potentially incorrect
+          setFieldErrors({
+            email: "Please verify your email address",
+            password: "Please verify your password",
+          })
         } else if (response.status === 404) {
-          errorMessage = data.message || data.error || "Account not found."
+          errorMessage = data.message || data.error || "Account not found with this email address."
+          setFieldErrors((prev) => ({ ...prev, email: "No account found with this email" }))
         } else if (response.status === 500) {
           errorMessage = "Server error. Please try again later."
         }
 
+        setErrorMessage(errorMessage)
         console.error("Login failed:", errorMessage)
-        toast({
-          title: "Login failed",
-          description: errorMessage,
-          variant: "destructive",
-        })
+
+        // Enhanced toast notification based on attempt count
+        if (newAttempts >= 3) {
+          toast({
+            title: "🚨 Multiple Failed Attempts",
+            description: `${errorMessage} (Attempt ${newAttempts}/5)`,
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "❌ Login Failed",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+
+        // Show warning for too many attempts
+        if (newAttempts >= 5) {
+          toast({
+            title: "⚠️ Account Security",
+            description: "Too many failed attempts. Please wait before trying again or reset your password.",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error) {
+      triggerShakeAnimation()
       console.error("Login error:", error)
+      setErrorMessage("Unable to connect to the server. Please check your connection.")
+
       toast({
-        title: "Connection Error",
+        title: "🔌 Connection Error",
         description: "Unable to connect to the server. Please check if the backend is running on localhost:5000.",
         variant: "destructive",
       })
@@ -313,6 +397,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <style jsx>{shakeKeyframes}</style>
       {/* Brand Header */}
       <div className="w-full py-6 px-4 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">
@@ -340,7 +425,9 @@ export default function LoginPage() {
       {/* Main Content */}
       <div className="flex items-center justify-center p-4 min-h-[calc(100vh-120px)]">
         <div className="w-full max-w-md">
-          <Card className="bg-white/95 backdrop-blur-sm shadow-2xl border border-gray-200 transition-all duration-300 hover:shadow-3xl">
+          <Card
+            className={`bg-white/95 backdrop-blur-sm shadow-2xl border border-gray-200 transition-all duration-300 hover:shadow-3xl ${showError ? "animate-shake" : ""}`}
+          >
             <CardHeader className="text-center pb-6 space-y-4">
               {/* Welcome Back Message */}
               {showWelcomeBack && (
@@ -408,11 +495,13 @@ export default function LoginPage() {
                       onChange={handleInputChange}
                       required
                       className={`h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white transition-all duration-200 ${
-                        formValidation.email.isValid
-                          ? "border-green-300 focus:border-green-500"
-                          : formData.email && !formValidation.email.isValid
-                            ? "border-red-300 focus:border-red-500"
-                            : ""
+                        fieldErrors.email
+                          ? "border-red-300 focus:border-red-500 bg-red-50"
+                          : formValidation.email.isValid
+                            ? "border-green-300 focus:border-green-500"
+                            : formData.email && !formValidation.email.isValid
+                              ? "border-red-300 focus:border-red-500"
+                              : ""
                       }`}
                     />
                     {formData.email && (
@@ -425,11 +514,19 @@ export default function LoginPage() {
                       </div>
                     )}
                   </div>
-                  {formData.email && formValidation.email.message && (
-                    <p className={`text-xs ${formValidation.email.isValid ? "text-green-600" : "text-red-600"}`}>
-                      {formValidation.email.message}
+                  {(formData.email && formValidation.email.message) || fieldErrors.email ? (
+                    <p
+                      className={`text-xs ${
+                        fieldErrors.email
+                          ? "text-red-600 font-medium"
+                          : formValidation.email.isValid
+                            ? "text-green-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {fieldErrors.email || formValidation.email.message}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -447,11 +544,13 @@ export default function LoginPage() {
                       onChange={handleInputChange}
                       required
                       className={`h-11 border-gray-300 focus:border-slate-500 focus:ring-slate-500/20 bg-white pr-20 transition-all duration-200 ${
-                        formValidation.password.isValid
-                          ? "border-green-300 focus:border-green-500"
-                          : formData.password && !formValidation.password.isValid
-                            ? "border-red-300 focus:border-red-500"
-                            : ""
+                        fieldErrors.password
+                          ? "border-red-300 focus:border-red-500 bg-red-50"
+                          : formValidation.password.isValid
+                            ? "border-green-300 focus:border-green-500"
+                            : formData.password && !formValidation.password.isValid
+                              ? "border-red-300 focus:border-red-500"
+                              : ""
                       }`}
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
@@ -476,11 +575,19 @@ export default function LoginPage() {
                       </Button>
                     </div>
                   </div>
-                  {formData.password && formValidation.password.message && (
-                    <p className={`text-xs ${formValidation.password.isValid ? "text-green-600" : "text-red-600"}`}>
-                      {formValidation.password.message}
+                  {(formData.password && formValidation.password.message) || fieldErrors.password ? (
+                    <p
+                      className={`text-xs ${
+                        fieldErrors.password
+                          ? "text-red-600 font-medium"
+                          : formValidation.password.isValid
+                            ? "text-green-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {fieldErrors.password || formValidation.password.message}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -512,6 +619,28 @@ export default function LoginPage() {
                   )}
                 </Button>
               </form>
+
+              {errorMessage && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 animate-fade-in">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">!</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Login Failed</p>
+                      <p className="text-xs text-red-600">{errorMessage}</p>
+                      {loginAttempts >= 3 && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Attempt {loginAttempts}/5 - Consider{" "}
+                          <Link href="/forgot-password" className="underline font-medium">
+                            resetting your password
+                          </Link>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Features Showcase */}
               <div className="bg-gradient-to-r from-slate-50 to-blue-50 rounded-lg p-4 border border-slate-200 transition-all duration-500">
@@ -547,7 +676,9 @@ export default function LoginPage() {
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   ))}
                 </div>
-              
+                <p className="text-xs text-slate-600">
+                  Trusted by <span className="font-semibold text-slate-900">10,000+</span> businesses worldwide
+                </p>
               </div>
             </CardContent>
 
