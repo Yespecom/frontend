@@ -18,6 +18,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 import {
   LayoutDashboard,
   Package,
@@ -42,6 +44,17 @@ import {
   AlertCircle,
   Wifi,
   WifiOff,
+  Zap,
+  MessageSquare,
+  BarChart3,
+  Mail,
+  Calendar,
+  FileText,
+  Camera,
+  Megaphone,
+  Smartphone,
+  Globe,
+  Sparkles,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -99,6 +112,7 @@ export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const { setOpenMobile } = useSidebar()
+  const { toast } = useToast()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [storeData, setStoreData] = useState<StoreData | null>(null)
   const [storeStats, setStoreStats] = useState<StoreStats | null>(null)
@@ -114,7 +128,7 @@ export function AppSidebar() {
         <div className="relative">
           <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg bg-white overflow-hidden border border-slate-600">
             <Image
-              src="/logo.png?height=48&width=48"
+              src="/placeholder.svg?height=48&width=48"
               alt="Yesp Logo"
               width={32}
               height={32}
@@ -130,14 +144,21 @@ export function AppSidebar() {
     )
   }
 
+  // Handle coming soon apps
+  const handleComingSoonApp = (appName: string) => {
+    toast({
+      title: "🚀 Coming Soon!",
+      description: `${appName} is currently in development. Stay tuned for updates!`,
+      duration: 4000,
+    })
+  }
+
   // Network status monitoring
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
-
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
-
     return () => {
       window.removeEventListener("online", handleOnline)
       window.removeEventListener("offline", handleOffline)
@@ -275,6 +296,7 @@ export function AppSidebar() {
           updatedAt: new Date().toISOString(),
         })
       }
+
       setLoadingState("success")
     } else {
       router.push("/login")
@@ -293,7 +315,7 @@ export function AppSidebar() {
     setOpenMobile(false)
   }
 
-  // Static navigation items - always visible
+  // Navigation sections
   const navigation = [
     {
       title: "Yesp Web Studio",
@@ -307,19 +329,16 @@ export function AppSidebar() {
           name: "Orders",
           href: "/orders",
           icon: ShoppingCart,
-          
         },
         {
           name: "Products",
           href: "/products",
           icon: Package,
-          // badge: storeStats?.products > 0 ? storeStats.products.toString() : undefined,
         },
         {
           name: "Customers",
           href: "/customers",
           icon: Users,
-          // badge: storeStats?.customers > 0 ? storeStats.customers.toString() : undefined,
         },
         {
           name: "Offers",
@@ -344,6 +363,73 @@ export function AppSidebar() {
       ],
     },
   ]
+
+  // Apps section - coming soon features
+  const appsSection = {
+    title: "Apps & Integrations",
+    items: [
+      {
+        name: "Analytics Pro",
+        icon: BarChart3,
+        description: "Advanced analytics and reporting",
+        comingSoon: true,
+      },
+      {
+        name: "Email Marketing",
+        icon: Mail,
+        description: "Automated email campaigns",
+        comingSoon: true,
+      },
+      {
+        name: "Live Chat",
+        icon: MessageSquare,
+        description: "Customer support chat",
+        comingSoon: true,
+      },
+      {
+        name: "Social Media",
+        icon: Megaphone,
+        description: "Social media management",
+        comingSoon: true,
+      },
+      {
+        name: "Mobile App",
+        icon: Smartphone,
+        description: "Native mobile application",
+        comingSoon: true,
+      },
+      {
+        name: "SEO Tools",
+        icon: Globe,
+        description: "Search engine optimization",
+        comingSoon: true,
+      },
+      {
+        name: "Content Creator",
+        icon: Camera,
+        description: "AI-powered content generation",
+        comingSoon: true,
+      },
+      {
+        name: "Appointment Booking",
+        icon: Calendar,
+        description: "Schedule and manage appointments",
+        comingSoon: true,
+      },
+      {
+        name: "Invoice Generator",
+        icon: FileText,
+        description: "Professional invoice creation",
+        comingSoon: true,
+      },
+      {
+        name: "AI Assistant",
+        icon: Sparkles,
+        description: "Smart business assistant",
+        comingSoon: true,
+      },
+    ],
+  }
 
   // Store status skeleton - minimal loading state
   const StoreStatusSkeleton = () => (
@@ -410,9 +496,12 @@ export function AppSidebar() {
           </div>
         )}
 
-        {/* Navigation - Always visible */}
+        {/* Main Navigation */}
         {navigation.map((section) => (
-          <SidebarGroup key={section.title} className="mb-4">
+          <SidebarGroup key={section.title} className="mb-6">
+            <SidebarGroupLabel className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+              {section.title}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-1">
                 {section.items.map((item) => (
@@ -431,8 +520,6 @@ export function AppSidebar() {
                           <item.icon className="w-4 h-4 flex-shrink-0" />
                           <span className="text-sm font-medium">{item.name}</span>
                         </div>
-                        {/* Show badge if available, or skeleton if loading */}
-                        
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -441,6 +528,37 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+
+        {/* Apps Section */}
+        <SidebarGroup className="mb-4">
+          <SidebarGroupLabel className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center">
+            <Zap className="w-3 h-3 mr-2" />
+            {appsSection.title}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-1">
+              {appsSection.items.map((app) => (
+                <SidebarMenuItem key={app.name}>
+                  <SidebarMenuButton
+                    onClick={() => handleComingSoonApp(app.name)}
+                    className="w-full justify-start text-slate-300 hover:text-white hover:bg-slate-700 h-10 sm:h-9 px-3 rounded-lg cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center space-x-3">
+                        <app.icon className="w-4 h-4 flex-shrink-0" />
+                        <div className="flex flex-col items-start">
+                          <span className="text-sm font-medium">{app.name}</span>
+                          <span className="text-xs text-slate-500 group-hover:text-slate-400">{app.description}</span>
+                        </div>
+                      </div>
+                      <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">Soon</Badge>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-slate-700 p-3 sm:p-4 bg-slate-900">
