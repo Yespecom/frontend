@@ -574,6 +574,7 @@ export default function ProductsPage() {
       sku: "",
       isActive: true,
       image: "",
+      options: [],
     }
     if (formData.trackQuantity) {
       newVariant.stock = ""
