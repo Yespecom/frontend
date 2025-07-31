@@ -73,6 +73,32 @@ export default function LoginPage() {
   const router = useRouter()
   const { toast } = useToast()
 
+  // Add this after the state declarations
+  const testNotifications = () => {
+    console.log("🧪 Testing notification system...")
+
+    // Test toast
+    toast({
+      title: "🧪 Test Notification",
+      description: "This is a test notification to verify the system works",
+      variant: "destructive",
+    })
+
+    // Test field errors
+    setFieldErrors({
+      email: "Test email error",
+      password: "Test password error",
+    })
+
+    // Test shake animation
+    triggerShakeAnimation()
+
+    // Test error message
+    setErrorMessage("Test error message for debugging")
+
+    console.log("🧪 All test notifications triggered")
+  }
+
   const features = [
     {
       icon: <Store className="w-5 h-5 text-blue-600" />,
@@ -224,9 +250,10 @@ export default function LoginPage() {
     }, 100)
 
     try {
-      console.log("Sending login request with data:", {
+      console.log("🚀 Sending login request with data:", {
         email: formData.email,
-        password: formData.password,
+        password: "***hidden***", // Don't log actual password
+        timestamp: new Date().toISOString(),
       })
 
       const response = await fetch("https://api.yespstudio.com/api/auth/login", {
@@ -241,11 +268,14 @@ export default function LoginPage() {
       })
 
       setLoginProgress(100)
-      console.log("Response status:", response.status)
+      console.log("📡 Response status:", response.status)
+      console.log("📡 Response headers:", Object.fromEntries(response.headers.entries()))
+
       const data = await response.json()
-      console.log("Response data:", data)
+      console.log("📦 Response data:", data)
 
       if (response.ok) {
+        console.log("✅ Login successful!")
         // Reset login attempts on success
         setLoginAttempts(0)
         localStorage.removeItem("loginAttempts")
@@ -304,81 +334,115 @@ export default function LoginPage() {
           router.push("/setup-store")
         }
       } else {
+        // Enhanced error logging
+        console.error("❌ Login failed with status:", response.status)
+        console.error("❌ Error response data:", data)
+
         // Increment login attempts
         const newAttempts = loginAttempts + 1
         setLoginAttempts(newAttempts)
         localStorage.setItem("loginAttempts", newAttempts.toString())
 
+        console.log("🔢 Login attempt count:", newAttempts)
+
         // Trigger shake animation
         triggerShakeAnimation()
+        console.log("🔄 Triggered shake animation")
 
         let errorMessage = "Invalid credentials. Please try again."
         let specificFieldError = ""
 
+        // Enhanced error handling with detailed logging
         if (response.status === 400) {
+          console.log("🔍 400 Bad Request - Invalid input data")
           errorMessage = data.message || data.error || "Invalid input data."
           if (data.field === "email") {
             specificFieldError = "email"
             setFieldErrors((prev) => ({ ...prev, email: "Please check your email address" }))
+            console.log("📧 Email field error set")
           } else if (data.field === "password") {
             specificFieldError = "password"
             setFieldErrors((prev) => ({ ...prev, password: "Please check your password" }))
+            console.log("🔒 Password field error set")
           }
         } else if (response.status === 401) {
+          console.log("🔍 401 Unauthorized - Invalid credentials")
           errorMessage = data.message || data.error || "Invalid email or password."
           // Set both fields as potentially incorrect
           setFieldErrors({
             email: "Please verify your email address",
             password: "Please verify your password",
           })
+          console.log("🔐 Both email and password field errors set")
         } else if (response.status === 404) {
+          console.log("🔍 404 Not Found - Account not found")
           errorMessage = data.message || data.error || "Account not found with this email address."
           setFieldErrors((prev) => ({ ...prev, email: "No account found with this email" }))
+          console.log("👤 Email field error set - account not found")
         } else if (response.status === 500) {
+          console.log("🔍 500 Server Error")
           errorMessage = "Server error. Please try again later."
         }
 
         setErrorMessage(errorMessage)
-        console.error("Login failed:", errorMessage)
+        console.log("💬 Error message set:", errorMessage)
+        console.error("🚨 Final error message:", errorMessage)
 
         // Enhanced toast notification based on attempt count
         if (newAttempts >= 3) {
+          console.log("⚠️ Multiple failed attempts detected:", newAttempts)
           toast({
             title: "🚨 Multiple Failed Attempts",
             description: `${errorMessage} (Attempt ${newAttempts}/5)`,
             variant: "destructive",
           })
+          console.log("🍞 Toast shown for multiple attempts")
         } else {
+          console.log("🔔 Showing standard error toast")
           toast({
             title: "❌ Login Failed",
             description: errorMessage,
             variant: "destructive",
           })
+          console.log("🍞 Standard error toast shown")
         }
 
         // Show warning for too many attempts
         if (newAttempts >= 5) {
+          console.log("🚫 Too many attempts - showing security warning")
           toast({
             title: "⚠️ Account Security",
             description: "Too many failed attempts. Please wait before trying again or reset your password.",
             variant: "destructive",
           })
+          console.log("🍞 Security warning toast shown")
         }
       }
     } catch (error) {
+      console.error("🔥 Network/Connection error:", error)
+      console.error("🔥 Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      })
+
       triggerShakeAnimation()
-      console.error("Login error:", error)
+      console.log("🔄 Triggered shake animation for network error")
+
       setErrorMessage("Unable to connect to the server. Please check your connection.")
+      console.log("💬 Network error message set")
 
       toast({
         title: "🔌 Connection Error",
         description: "Unable to connect to the server. Please check if the backend is running on localhost:5000.",
         variant: "destructive",
       })
+      console.log("🍞 Network error toast shown")
     } finally {
       clearInterval(progressInterval)
       setIsLoading(false)
       setLoginProgress(0)
+      console.log("🏁 Login process completed, loading state reset")
     }
   }
 
@@ -480,6 +544,15 @@ export default function LoginPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Add this button temporarily in the form for testing (remove after debugging) */}
+                <Button
+                  type="button"
+                  onClick={testNotifications}
+                  variant="outline"
+                  className="w-full mb-4 bg-transparent"
+                >
+                  🧪 Test Notifications (Debug Only)
+                </Button>
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium text-slate-700 flex items-center">
                     <Mail className="w-4 h-4 mr-2 text-slate-500" />
