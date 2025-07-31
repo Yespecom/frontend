@@ -142,7 +142,7 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Updated API endpoint to match new backend structure
+    // Use local API endpoint instead of external domain
     const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
     })
@@ -168,7 +168,7 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Updated API endpoint to match new backend structure
+    // Use local API endpoint instead of external domain
     const result = await makeApiRequest("/api/auth/verify-reset-otp", {
       email: email.trim(),
       otp: otp,
@@ -199,7 +199,7 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Updated API endpoint to match new backend structure
+    // Use local API endpoint instead of external domain
     const result = await makeApiRequest("/api/auth/reset-password", {
       email: email.trim(),
       otp: otp,
@@ -221,7 +221,7 @@ export default function ForgotPasswordPage(): ReactElement {
     setResendLoading(true)
     setError("")
 
-    // Updated API endpoint to match new backend structure
+    // Use local API endpoint instead of external domain
     const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
     })
