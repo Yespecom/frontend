@@ -378,7 +378,7 @@ export function AppSidebar() {
 
   // User menu skeleton - minimal loading state
   const UserMenuSkeleton = () => (
-    <div className="w-full h-12 sm:h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800">
+    <div className="w-full h-10 sm:h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800">
       <div className="flex items-center space-x-3 h-full">
         <Skeleton className="w-8 h-8 rounded-full bg-slate-600" />
         <div className="flex-1 space-y-1">
@@ -517,7 +517,7 @@ export function AppSidebar() {
             ) : (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="w-full justify-between text-slate-300 hover:text-white hover:bg-slate-700 h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800 shadow-sm group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center">
+                  <SidebarMenuButton className="w-full justify-between text-slate-300 hover:text-white hover:bg-slate-700 h-10 sm:h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800 shadow-sm group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center">
                     <div className="flex items-center space-x-3 min-w-0 flex-1 group-data-[collapsible=icon]:space-x-0">
                       <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-500/20">
                         <User className="w-4 h-4 text-white" />
