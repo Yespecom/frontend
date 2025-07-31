@@ -67,7 +67,7 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
-    phone: "",
+    phone: "+91 ",
     password: "",
     confirmPassword: "",
   })
@@ -117,12 +117,27 @@ export default function RegisterPage() {
 
   const validatePhone = (phone: string): string | null => {
     if (!phone.trim()) return "Phone number is required"
+
+    // Remove all non-digits to check the actual number
     const cleanPhone = phone.replace(/\D/g, "")
-    if (cleanPhone.length < 10) return "Phone number must be at least 10 digits"
-    if (cleanPhone.length > 15) return "Phone number is too long"
-    if (!/^[+]?[1-9][\d]{9,14}$/.test(phone.replace(/\s/g, ""))) {
-      return "Please enter a valid phone number (e.g., +1234567890 or 1234567890)"
+
+    // Check if it starts with 91 (Indian country code)
+    if (!cleanPhone.startsWith("91")) {
+      return "Please enter a valid Indian phone number"
     }
+
+    // Remove country code to check mobile number
+    const mobileNumber = cleanPhone.substring(2)
+
+    // Indian mobile numbers are 10 digits and start with 6, 7, 8, or 9
+    if (mobileNumber.length !== 10) {
+      return "Indian mobile number must be 10 digits"
+    }
+
+    if (!/^[6-9]/.test(mobileNumber)) {
+      return "Indian mobile number must start with 6, 7, 8, or 9"
+    }
+
     return null
   }
 
@@ -190,11 +205,32 @@ export default function RegisterPage() {
       if (name === "phone") {
         // Remove all non-digits
         const digits = value.replace(/\D/g, "")
-        // Format as needed (you can customize this)
-        if (digits.length <= 10) {
-          formattedValue = digits.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+
+        // Always start with +91 for Indian numbers
+        if (digits.length === 0) {
+          formattedValue = "+91 "
+        } else if (digits.length <= 2) {
+          // If user is typing the country code
+          if (digits.startsWith("91")) {
+            formattedValue = "+91 "
+          } else {
+            formattedValue = "+91 " + digits
+          }
         } else {
-          formattedValue = `+${digits.slice(0, -10)} (${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`
+          // Format as +91 XXXXX XXXXX
+          const countryCode = digits.startsWith("91") ? digits.substring(0, 2) : "91"
+          const number = digits.startsWith("91") ? digits.substring(2) : digits
+
+          if (number.length <= 5) {
+            formattedValue = `+${countryCode} ${number}`
+          } else {
+            formattedValue = `+${countryCode} ${number.substring(0, 5)} ${number.substring(5, 10)}`
+          }
+        }
+
+        // Limit to Indian phone number length (+91 + 10 digits)
+        if (digits.length > 12) {
+          return // Don't update if too long
         }
       }
 
@@ -798,7 +834,7 @@ export default function RegisterPage() {
                       id="phone"
                       name="phone"
                       type="tel"
-                      placeholder="(123) 456-7890 or +1234567890"
+                      placeholder="+91 98765 43210"
                       value={formData.phone}
                       onChange={handleInputChange}
                       onBlur={(e) => handleFieldBlur("phone", e.target.value)}
@@ -819,7 +855,9 @@ export default function RegisterPage() {
                     error={validationErrors.phone}
                     success={fieldTouched.phone && !validationErrors.phone}
                   />
-                  <div className="text-xs text-slate-500">💡 Tip: Include country code for international numbers</div>
+                  <div className="text-xs text-slate-500">
+                    🇮🇳 Indian mobile number (10 digits starting with 6, 7, 8, or 9)
+                  </div>
                 </div>
 
                 {/* Password Field */}
