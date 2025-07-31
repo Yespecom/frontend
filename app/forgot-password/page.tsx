@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
+import { Progress } from "@/components/ui/progress"
 import Image from "next/image"
 import Link from "next/link"
-import { Mail, ArrowLeft, Send, CheckCircle, AlertCircle, Shield, Lock, Eye, EyeOff } from "lucide-react"
+import { Mail, ArrowLeft, Send, CheckCircle, AlertCircle, Shield, Lock, Eye, EyeOff, Check, X } from "lucide-react"
 
 type Step = "email" | "verify" | "reset" | "success"
 
@@ -20,6 +21,13 @@ interface ApiResponse {
   message?: string
   error?: string
   success?: boolean
+}
+
+interface PasswordStrength {
+  score: number
+  feedback: string[]
+  color: string
+  label: string
 }
 
 export default function ForgotPasswordPage(): ReactElement {
@@ -35,11 +43,15 @@ export default function ForgotPasswordPage(): ReactElement {
   const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState("")
   const [fieldError, setFieldError] = useState("")
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({
+    score: 0,
+    feedback: [],
+    color: "bg-gray-200",
+    label: "Enter password",
+  })
 
-  // Fix: Use useRef instead of createRef
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fix: Proper cleanup and timer management
   useEffect(() => {
     if (countdown > 0) {
       timerRef.current = setTimeout(() => setCountdown(countdown - 1), 1000)
@@ -52,7 +64,6 @@ export default function ForgotPasswordPage(): ReactElement {
     }
   }, [countdown])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -65,25 +76,156 @@ export default function ForgotPasswordPage(): ReactElement {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   }, [])
 
-  const handleApiError = useCallback((response: Response, data: ApiResponse): string => {
-    // Handle different HTTP status codes
-    switch (response.status) {
-      case 400:
-        return data.error || data.message || "Invalid request. Please check your input."
-      case 401:
-        return "Invalid or expired verification code."
-      case 404:
-        return "Email address not found. Please check and try again."
-      case 429:
-        return "Too many requests. Please wait a moment before trying again."
-      case 500:
-        return "Server error. Our team has been notified. Please try again later."
-      case 503:
-        return "Service temporarily unavailable. Please try again in a few minutes."
-      default:
-        return data.error || data.message || "Something went wrong. Please try again."
+  const calculatePasswordStrength = useCallback((password: string): PasswordStrength => {
+    if (!password) {
+      return {
+        score: 0,
+        feedback: [],
+        color: "bg-gray-200",
+        label: "Enter password",
+      }
+    }
+
+    let score = 0
+    const feedback: string[] = []
+
+    // Length check
+    if (password.length >= 8) {
+      score += 20
+    } else {
+      feedback.push("At least 8 characters")
+    }
+
+    // Uppercase check
+    if (/[A-Z]/.test(password)) {
+      score += 20
+    } else {
+      feedback.push("One uppercase letter")
+    }
+
+    // Lowercase check
+    if (/[a-z]/.test(password)) {
+      score += 20
+    } else {
+      feedback.push("One lowercase letter")
+    }
+
+    // Number check
+    if (/\d/.test(password)) {
+      score += 20
+    } else {
+      feedback.push("One number")
+    }
+
+    // Special character check
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      score += 20
+    } else {
+      feedback.push("One special character")
+    }
+
+    // Determine color and label based on score
+    let color = "bg-red-500"
+    let label = "Very Weak"
+
+    if (score >= 80) {
+      color = "bg-green-500"
+      label = "Very Strong"
+    } else if (score >= 60) {
+      color = "bg-yellow-500"
+      label = "Strong"
+    } else if (score >= 40) {
+      color = "bg-orange-500"
+      label = "Fair"
+    } else if (score >= 20) {
+      color = "bg-red-400"
+      label = "Weak"
+    }
+
+    return {
+      score,
+      feedback,
+      color,
+      label,
     }
   }, [])
+
+  useEffect(() => {
+    if (newPassword) {
+      setPasswordStrength(calculatePasswordStrength(newPassword))
+    }
+  }, [newPassword, calculatePasswordStrength])
+
+  const logSecurityEvent = useCallback(
+    async (event: string, details: object) => {
+      try {
+        // Log security events for monitoring
+        console.log(`🔒 Security Event: ${event}`, {
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          email: email || "unknown",
+          step,
+          ...details,
+        })
+
+        // In production, you might want to send this to a logging service
+        // await fetch('/api/security/log', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({
+        //     event,
+        //     timestamp: new Date().toISOString(),
+        //     userAgent: navigator.userAgent,
+        //     email: email || 'unknown',
+        //     step,
+        //     ...details
+        //   })
+        // })
+      } catch (error) {
+        console.error("Failed to log security event:", error)
+      }
+    },
+    [email, step],
+  )
+
+  const handleApiError = useCallback(
+    (response: Response, data: ApiResponse): string => {
+      let errorMessage = ""
+
+      switch (response.status) {
+        case 400:
+          errorMessage = data.error || data.message || "Invalid request. Please check your input."
+          break
+        case 401:
+          errorMessage = "Invalid or expired verification code."
+          break
+        case 404:
+          errorMessage = "Email address not found. Please check and try again."
+          break
+        case 429:
+          errorMessage = "Too many requests. Please wait a moment before trying again."
+          break
+        case 500:
+          errorMessage = "Server error. Our team has been notified. Please try again later."
+          break
+        case 503:
+          errorMessage = "Service temporarily unavailable. Please try again in a few minutes."
+          break
+        default:
+          errorMessage = data.error || data.message || "Something went wrong. Please try again."
+      }
+
+      // Log the error for security monitoring
+      logSecurityEvent("password_reset_error", {
+        status: response.status,
+        error: errorMessage,
+        originalError: data.error || data.message,
+      })
+
+      return errorMessage
+    },
+    [logSecurityEvent],
+  )
 
   const makeApiRequest = useCallback(
     async (url: string, body: object): Promise<{ success: boolean; data?: ApiResponse; error?: string }> => {
@@ -109,7 +251,12 @@ export default function ForgotPasswordPage(): ReactElement {
         }
       } catch (error) {
         console.error("💥 API request failed:", error)
-        // Check if it's a network error
+
+        logSecurityEvent("password_reset_network_error", {
+          url,
+          error: error instanceof Error ? error.message : "Unknown error",
+        })
+
         if (error instanceof TypeError && error.message.includes("fetch")) {
           return {
             success: false,
@@ -122,7 +269,7 @@ export default function ForgotPasswordPage(): ReactElement {
         }
       }
     },
-    [handleApiError],
+    [handleApiError, logSecurityEvent],
   )
 
   const handleSendOTP = async (e: React.FormEvent) => {
@@ -142,7 +289,12 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Use local API endpoint instead of external domain
+    // Log password reset attempt
+    await logSecurityEvent("password_reset_requested", {
+      email: email.trim(),
+    })
+
+    // Use the existing backend API endpoint
     const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
     })
@@ -150,8 +302,15 @@ export default function ForgotPasswordPage(): ReactElement {
     if (result.success) {
       setStep("verify")
       setCountdown(60)
+      await logSecurityEvent("password_reset_otp_sent", {
+        email: email.trim(),
+      })
     } else {
       setError(result.error || "Failed to send OTP. Please try again.")
+      await logSecurityEvent("password_reset_otp_failed", {
+        email: email.trim(),
+        error: result.error,
+      })
     }
 
     setIsLoading(false)
@@ -168,7 +327,12 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Use local API endpoint instead of external domain
+    await logSecurityEvent("password_reset_otp_verification_attempted", {
+      email: email.trim(),
+      otpLength: otp.length,
+    })
+
+    // Use the existing backend API endpoint
     const result = await makeApiRequest("/api/auth/verify-reset-otp", {
       email: email.trim(),
       otp: otp,
@@ -176,8 +340,15 @@ export default function ForgotPasswordPage(): ReactElement {
 
     if (result.success) {
       setStep("reset")
+      await logSecurityEvent("password_reset_otp_verified", {
+        email: email.trim(),
+      })
     } else {
       setError(result.error || "Invalid or expired OTP. Please try again.")
+      await logSecurityEvent("password_reset_otp_verification_failed", {
+        email: email.trim(),
+        error: result.error,
+      })
     }
 
     setIsLoading(false)
@@ -192,6 +363,11 @@ export default function ForgotPasswordPage(): ReactElement {
       return
     }
 
+    if (passwordStrength.score < 40) {
+      setError("Please choose a stronger password. Follow the suggestions below.")
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match.")
       return
@@ -199,7 +375,12 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Use local API endpoint instead of external domain
+    await logSecurityEvent("password_reset_attempted", {
+      email: email.trim(),
+      passwordStrength: passwordStrength.score,
+    })
+
+    // Use the existing backend API endpoint
     const result = await makeApiRequest("/api/auth/reset-password", {
       email: email.trim(),
       otp: otp,
@@ -208,8 +389,15 @@ export default function ForgotPasswordPage(): ReactElement {
 
     if (result.success) {
       setStep("success")
+      await logSecurityEvent("password_reset_completed", {
+        email: email.trim(),
+      })
     } else {
       setError(result.error || "Failed to reset password. Please try again.")
+      await logSecurityEvent("password_reset_failed", {
+        email: email.trim(),
+        error: result.error,
+      })
     }
 
     setIsLoading(false)
@@ -221,7 +409,11 @@ export default function ForgotPasswordPage(): ReactElement {
     setResendLoading(true)
     setError("")
 
-    // Use local API endpoint instead of external domain
+    await logSecurityEvent("password_reset_otp_resend_requested", {
+      email: email.trim(),
+    })
+
+    // Use the existing backend API endpoint
     const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
     })
@@ -229,8 +421,15 @@ export default function ForgotPasswordPage(): ReactElement {
     if (result.success) {
       setCountdown(60)
       setOtp("")
+      await logSecurityEvent("password_reset_otp_resent", {
+        email: email.trim(),
+      })
     } else {
       setError(result.error || "Failed to resend OTP. Please try again.")
+      await logSecurityEvent("password_reset_otp_resend_failed", {
+        email: email.trim(),
+        error: result.error,
+      })
     }
 
     setResendLoading(false)
@@ -501,7 +700,50 @@ export default function ForgotPasswordPage(): ReactElement {
                         )}
                       </Button>
                     </div>
+
+                    {/* Password Strength Meter */}
+                    {newPassword && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-600">Password Strength</span>
+                          <span
+                            className={`text-xs font-medium ${
+                              passwordStrength.score >= 80
+                                ? "text-green-600"
+                                : passwordStrength.score >= 60
+                                  ? "text-yellow-600"
+                                  : passwordStrength.score >= 40
+                                    ? "text-orange-600"
+                                    : "text-red-600"
+                            }`}
+                          >
+                            {passwordStrength.label}
+                          </span>
+                        </div>
+                        <Progress value={passwordStrength.score} className="h-2" />
+                        {passwordStrength.feedback.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-slate-600">Missing requirements:</p>
+                            <ul className="space-y-1">
+                              {passwordStrength.feedback.map((item, index) => (
+                                <li key={index} className="flex items-center text-xs text-slate-600">
+                                  <X className="w-3 h-3 text-red-500 mr-2" />
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {passwordStrength.score >= 80 && (
+                          <div className="flex items-center text-xs text-green-600">
+                            <Check className="w-3 h-3 mr-2" />
+                            Strong password! All requirements met.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                   <div className="space-y-2">
                     <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
                       Confirm New Password
@@ -534,11 +776,71 @@ export default function ForgotPasswordPage(): ReactElement {
                         )}
                       </Button>
                     </div>
+                    {confirmPassword && newPassword !== confirmPassword && (
+                      <p className="text-xs text-red-600 flex items-center">
+                        <X className="w-3 h-3 mr-1" />
+                        Passwords do not match
+                      </p>
+                    )}
+                    {confirmPassword && newPassword === confirmPassword && (
+                      <p className="text-xs text-green-600 flex items-center">
+                        <Check className="w-3 h-3 mr-1" />
+                        Passwords match
+                      </p>
+                    )}
                   </div>
+
+                  {/* Password Requirements */}
+                  <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                    <h4 className="text-sm font-medium text-slate-700">Password Requirements:</h4>
+                    <ul className="space-y-1 text-xs text-slate-600">
+                      <li className="flex items-center">
+                        {newPassword.length >= 8 ? (
+                          <Check className="w-3 h-3 text-green-500 mr-2" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-500 mr-2" />
+                        )}
+                        At least 8 characters long
+                      </li>
+                      <li className="flex items-center">
+                        {/[A-Z]/.test(newPassword) ? (
+                          <Check className="w-3 h-3 text-green-500 mr-2" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-500 mr-2" />
+                        )}
+                        One uppercase letter (A-Z)
+                      </li>
+                      <li className="flex items-center">
+                        {/[a-z]/.test(newPassword) ? (
+                          <Check className="w-3 h-3 text-green-500 mr-2" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-500 mr-2" />
+                        )}
+                        One lowercase letter (a-z)
+                      </li>
+                      <li className="flex items-center">
+                        {/\d/.test(newPassword) ? (
+                          <Check className="w-3 h-3 text-green-500 mr-2" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-500 mr-2" />
+                        )}
+                        One number (0-9)
+                      </li>
+                      <li className="flex items-center">
+                        {/[!@#$%^&*(),.?":{}|<>]/.test(newPassword) ? (
+                          <Check className="w-3 h-3 text-green-500 mr-2" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-500 mr-2" />
+                        )}
+                        One special character (!@#$%^&*)
+                      </li>
+                    </ul>
+                  </div>
+
                   <Button
                     type="submit"
                     className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={isLoading}
+                    disabled={isLoading || passwordStrength.score < 40 || newPassword !== confirmPassword}
                   >
                     {isLoading ? (
                       <div className="flex items-center space-x-2">
