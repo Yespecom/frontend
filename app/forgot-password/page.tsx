@@ -142,10 +142,9 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Fixed API endpoint to match backend
-    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/send", {
+    // Updated API endpoint to match new backend structure
+    const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
-      purpose: "password_reset",
     })
 
     if (result.success) {
@@ -169,11 +168,10 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Fixed API endpoint to match backend
-    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/verify", {
+    // Updated API endpoint to match new backend structure
+    const result = await makeApiRequest("/api/auth/verify-reset-otp", {
       email: email.trim(),
       otp: otp,
-      purpose: "password_reset",
     })
 
     if (result.success) {
@@ -201,8 +199,8 @@ export default function ForgotPasswordPage(): ReactElement {
 
     setIsLoading(true)
 
-    // Fixed API endpoint to match backend
-    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/reset-password", {
+    // Updated API endpoint to match new backend structure
+    const result = await makeApiRequest("/api/auth/reset-password", {
       email: email.trim(),
       otp: otp,
       newPassword: newPassword,
@@ -223,10 +221,9 @@ export default function ForgotPasswordPage(): ReactElement {
     setResendLoading(true)
     setError("")
 
-    // Fixed API endpoint to match backend
-    const result = await makeApiRequest("https://api.yespstudio.com/api/auth/otp/resend", {
+    // Updated API endpoint to match new backend structure
+    const result = await makeApiRequest("/api/auth/forgot-password", {
       email: email.trim(),
-      purpose: "password_reset",
     })
 
     if (result.success) {
@@ -287,13 +284,7 @@ export default function ForgotPasswordPage(): ReactElement {
           <div className="flex justify-between items-center py-6">
             <Link href="/" className="flex items-center space-x-4 group">
               <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105">
-                <Image
-                  src="/placeholder.svg?height=48&width=48&text=Logo"
-                  alt="Yesp Ecom Studio Logo"
-                  width={48}
-                  height={48}
-                  className="w-12 h-12"
-                />
+                <Image src="/logo.png" alt="Yesp Ecom Studio Logo" width={48} height={48} className="w-12 h-12" />
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-slate-900">Yesp Ecom Studio</span>
@@ -435,7 +426,7 @@ export default function ForgotPasswordPage(): ReactElement {
                       </div>
                     ) : (
                       <div className="flex items-center space-x-2">
-                        <CheckCircle className="w-4 w-4" />
+                        <CheckCircle className="w-4 h-4" />
                         <span>Verify Code</span>
                       </div>
                     )}
