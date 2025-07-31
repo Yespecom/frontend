@@ -189,44 +189,6 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   )
 }
 
-// Add this helper function after the utility functions
-const validateAndFixPricing = () => {
-  if (!formData.hasVariants) {
-    const priceValue = safeToNumber(formData.price)
-    const originalPriceValue = safeToNumber(formData.originalPrice)
-
-    // If originalPrice is set but not greater than price, clear it
-    if (formData.originalPrice && originalPriceValue <= priceValue) {
-      setFormData((prev) => ({ ...prev, originalPrice: "" }))
-      showToast("Price Adjusted", "Original price was cleared because it must be greater than selling price", "warning")
-    }
-  }
-}
-
-// Add this function after the utility functions
-const debugFormData = () => {
-  console.log("🔍 Current form state debug:", {
-    formData: {
-      ...formData,
-      variants: formData.variants.map((v, index) => ({
-        index,
-        _id: v._id,
-        name: v.name,
-        price: v.price,
-        priceType: typeof v.price,
-        stock: v.stock,
-        stockType: typeof v.stock,
-        sku: v.sku,
-        isActive: v.isActive,
-        image: v.image,
-      })),
-    },
-    images: images.length,
-    tags: tags.length,
-    editingProduct: !!editingProduct,
-  })
-}
-
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
@@ -270,7 +232,6 @@ export default function ProductsPage() {
     variants: [] as ProductVariant[],
     trackQuantity: true,
   })
-
   const [images, setImages] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
@@ -286,11 +247,9 @@ export default function ProductsPage() {
     const id = Math.random().toString(36).substr(2, 9)
     setToasts((prev) => [...prev, { ...toast, id }])
   }
-
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }
-
   const showToast = (title: string, description?: string, type: Toast["type"] = "info") => {
     addToast({ title, description, type })
   }
@@ -305,25 +264,7 @@ export default function ProductsPage() {
       headers: Object.fromEntries(response.headers.entries()),
     })
 
-    // Enhanced logging for validation errors
-    if (data?.details && Array.isArray(data.details)) {
-      console.error("🔍 Detailed validation errors:")
-      data.details.forEach((detail: any, index: number) => {
-        console.error(`  ${index + 1}. Field: ${detail.field || "unknown"}`)
-        console.error(`     Message: ${detail.message || "unknown"}`)
-        console.error(`     Value: ${detail.value}`)
-        console.error(`     Kind: ${detail.kind || "unknown"}`)
-        console.error(`     Path: ${detail.path || "unknown"}`)
-      })
-    }
-
-    // Enhanced logging for debug info
-    if (data?.debugInfo) {
-      console.error("🔍 Debug information:", data.debugInfo)
-    }
-
     let errorMessage = "Something went wrong. Please try again."
-
     if (data?.error) {
       errorMessage = data.error
     } else if (data?.message) {
@@ -334,14 +275,12 @@ export default function ProductsPage() {
       } else if (typeof data.details === "string") {
         errorMessage = data.details
       } else if (typeof data.details === "object") {
-        // Handle validation errors that might be in object format
         const validationErrors = Object.entries(data.details)
           .map(([field, error]) => `${field}: ${error}`)
           .join(", ")
         errorMessage = validationErrors || "Validation failed"
       }
     } else if (data?.errors) {
-      // Handle different error formats
       if (Array.isArray(data.errors)) {
         errorMessage = data.errors.map((error: any) => error.message || error).join(", ")
       } else if (typeof data.errors === "object") {
@@ -382,7 +321,6 @@ export default function ProductsPage() {
           errorMessage = `Request failed with status ${response.status}. Please try again.`
       }
     }
-
     return errorMessage
   }
 
@@ -400,7 +338,6 @@ export default function ProductsPage() {
     const defaultHeaders: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     }
-
     if (!(options.body instanceof FormData)) {
       defaultHeaders["Content-Type"] = "application/json"
     }
@@ -413,14 +350,11 @@ export default function ProductsPage() {
       ...options,
     }
 
-    console.log(`🚀 Making API request to: ${url}`)
-
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetch(url, defaultOptions)
         const responseText = await response.text()
         let data
-
         try {
           data = responseText ? JSON.parse(responseText) : {}
         } catch (parseError) {
@@ -437,18 +371,17 @@ export default function ProductsPage() {
           if (attempt === retries) {
             throw new Error(errorMessage)
           }
-          console.log(`🔄 Retrying request (attempt ${attempt + 1}/${retries})...`)
+          showToast("API Error", `Retrying... (${attempt + 1}/${retries})`, "warning")
           await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
           continue
         }
-
-        console.log(`✅ Request successful:`, data)
         return { response, data }
       } catch (error) {
         console.error(`❌ Request failed (attempt ${attempt + 1}):`, error)
         if (attempt === retries) {
           throw error
         }
+        showToast("Network Error", `Retrying... (${attempt + 1}/${retries})`, "warning")
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
       }
     }
@@ -502,7 +435,7 @@ export default function ProductsPage() {
       setApiErrors((prev) => ({ ...prev, products: "" }))
       const { data } = await makeApiRequest(`${API_BASE_URL}/api/admin/products`)
       setProducts(Array.isArray(data) ? data : [])
-      console.log(`✅ Loaded ${Array.isArray(data) ? data.length : 0} products`)
+      showToast("Products Loaded", `Successfully loaded ${Array.isArray(data) ? data.length : 0} products.`, "success")
     } catch (error) {
       console.error("❌ Error fetching products:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch products"
@@ -519,7 +452,6 @@ export default function ProductsPage() {
       setApiErrors((prev) => ({ ...prev, categories: "" }))
       const { data } = await makeApiRequest(`${API_BASE_URL}/api/admin/categories`)
       setCategories(Array.isArray(data) ? data : [])
-      console.log(`✅ Loaded ${Array.isArray(data) ? data.length : 0} categories`)
     } catch (error) {
       console.error("❌ Error fetching categories:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch categories"
@@ -534,7 +466,6 @@ export default function ProductsPage() {
       setApiErrors((prev) => ({ ...prev, offers: "" }))
       const { data } = await makeApiRequest(`${API_BASE_URL}/api/admin/offers`)
       setOffers(Array.isArray(data) ? data : [])
-      console.log(`✅ Loaded ${Array.isArray(data) ? data.length : 0} offers`)
     } catch (error) {
       console.error("❌ Error fetching offers:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch offers"
@@ -546,7 +477,6 @@ export default function ProductsPage() {
 
   const filterProducts = () => {
     let filtered = products
-
     if (searchTerm) {
       filtered = filtered.filter(
         (product) =>
@@ -555,11 +485,9 @@ export default function ProductsPage() {
           product.tags.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase())),
       )
     }
-
     if (selectedCategory !== "all") {
       filtered = filtered.filter((product) => product.category._id === selectedCategory)
     }
-
     if (selectedStatus !== "all") {
       if (selectedStatus === "active") {
         filtered = filtered.filter((product) => product.isActive)
@@ -576,12 +504,25 @@ export default function ProductsPage() {
         )
       }
     }
-
     setFilteredProducts(filtered)
   }
 
-  // Update the handleInputChange function to include price validation
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const validateAndFixPricing = () => {
+    if (!formData.hasVariants) {
+      const priceValue = safeToNumber(formData.price)
+      const originalPriceValue = safeToNumber(formData.originalPrice)
+      if (formData.originalPrice && originalPriceValue <= priceValue) {
+        setFormData((prev) => ({ ...prev, originalPrice: "" }))
+        showToast(
+          "Price Adjusted",
+          "Original price was cleared because it must be greater than selling price",
+          "warning",
+        )
+      }
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | React.ChangeEvent<HTMLTextAreaElement>>) => {
     const { name, value } = e.target
     if (name.startsWith("dimensions.")) {
       const dimensionKey = name.split(".")[1]
@@ -594,8 +535,6 @@ export default function ProductsPage() {
       }))
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }))
-
-      // FIXED: Validate pricing fields on change
       if (name === "price" || name === "originalPrice") {
         setTimeout(() => {
           validateAndFixPricing()
@@ -611,13 +550,9 @@ export default function ProductsPage() {
   const handleCheckboxChange = (name: string, checked: boolean) => {
     setFormData((prev) => {
       const newFormData = { ...prev, [name]: checked }
-
-      // FIXED: Clear variants when hasVariants is disabled
       if (name === "hasVariants" && !checked) {
-        console.log("🔄 Clearing variants because hasVariants is now false")
         newFormData.variants = []
       }
-
       return newFormData
     })
   }
@@ -643,18 +578,15 @@ export default function ProductsPage() {
       isActive: true,
       image: "",
     }
-
     if (formData.trackQuantity) {
       newVariant.stock = ""
     }
-
     setEditingVariant(newVariant)
     setVariantImageUploadKey((prev) => prev + 1)
     setIsVariantDialogOpen(true)
   }
 
   const handleEditVariantClick = (variant: ProductVariant) => {
-    // FIXED: Ensure all variant fields are properly converted to strings
     const safeVariant: ProductVariant = {
       _id: variant._id,
       name: safeToString(variant.name),
@@ -665,13 +597,9 @@ export default function ProductsPage() {
       isActive: Boolean(variant.isActive),
       image: safeToString(variant.image),
     }
-
-    // Only include stock if quantity tracking is enabled
     if (formData.trackQuantity && variant.stock !== undefined) {
       safeVariant.stock = safeToString(variant.stock)
     }
-
-    console.log("🔍 Editing variant with safe conversion:", safeVariant)
     setEditingVariant(safeVariant)
     setVariantImageUploadKey((prev) => prev + 1)
     setIsVariantDialogOpen(true)
@@ -685,7 +613,6 @@ export default function ProductsPage() {
     showToast("Variant Deleted", `Variant '${variantToDelete.name}' has been removed.`, "success")
   }
 
-  // Update the handleVariantFormChange function
   const handleVariantFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
@@ -695,12 +622,9 @@ export default function ProductsPage() {
         ...prev,
         [name]: type === "checkbox" ? checked : value,
       }
-
-      // FIXED: Validate variant pricing
       if (name === "price" || name === "originalPrice") {
         const priceValue = safeToNumber(updated.price)
         const originalPriceValue = safeToNumber(updated.originalPrice || "")
-
         if (updated.originalPrice && originalPriceValue <= priceValue) {
           updated.originalPrice = ""
           showToast(
@@ -710,7 +634,6 @@ export default function ProductsPage() {
           )
         }
       }
-
       return updated
     })
   }
@@ -728,13 +651,11 @@ export default function ProductsPage() {
   const handleSaveVariant = () => {
     if (!editingVariant) return
 
-    // Basic validation for variant
     const requiredFields = ["name", "price", "sku"]
     if (formData.trackQuantity) {
       requiredFields.push("stock")
     }
 
-    // FIXED: Use safe string conversion for validation
     const missingFields = requiredFields.filter((field) => {
       const value = editingVariant[field as keyof ProductVariant]
       const stringValue = safeToString(value)
@@ -750,7 +671,6 @@ export default function ProductsPage() {
       return
     }
 
-    // Check for duplicate SKU
     const editingVariantSku = safeToString(editingVariant.sku).trim().toUpperCase()
     const isDuplicateSKU = formData.variants.some((v) => {
       const variantSku = safeToString(v.sku).trim().toUpperCase()
@@ -762,9 +682,11 @@ export default function ProductsPage() {
       return
     }
 
-    // FIXED: Create clean variant object with proper string conversion
     const variantToSave: ProductVariant = {
-      _id: editingVariant._id || `temp-${Date.now()}-${Math.random()}`,
+      _id:
+        editingVariant._id && !editingVariant._id.startsWith("temp-")
+          ? editingVariant._id
+          : `temp-${Date.now()}-${Math.random()}`,
       name: safeToString(editingVariant.name).trim(),
       options: [safeToString(editingVariant.name).trim()],
       price: safeToString(editingVariant.price),
@@ -788,45 +710,35 @@ export default function ProductsPage() {
         return { ...prev, variants: [...prev.variants, variantToSave] }
       }
     })
-
     showToast("Variant Saved", `Variant '${safeToString(editingVariant.name)}' has been saved.`, "success")
     setIsVariantDialogOpen(false)
     setEditingVariant(null)
   }
 
-  // FIXED: Enhanced form validation with safe string conversion
   const validateForm = () => {
     const errors: string[] = []
 
-    // Basic validation
     if (!formData.name.trim()) {
       errors.push("Product name is required")
     }
-
     if (!formData.sku.trim()) {
       errors.push("SKU is required")
     }
-
     if (!formData.shortDescription.trim()) {
       errors.push("Short description is required")
     }
-
     if (!formData.description.trim()) {
       errors.push("Description is required")
     }
-
     if (!formData.category) {
       errors.push("Category is required")
     }
 
     if (!formData.hasVariants) {
-      // Validate main product fields
       const priceValue = safeToNumber(formData.price)
       if (!formData.price || priceValue <= 0) {
         errors.push("Price must be greater than 0")
       }
-
-      // FIXED: Validate originalPrice properly
       if (formData.originalPrice && formData.originalPrice.trim() !== "") {
         const originalPriceValue = safeToNumber(formData.originalPrice)
         if (isNaN(originalPriceValue) || originalPriceValue <= 0) {
@@ -835,39 +747,30 @@ export default function ProductsPage() {
           errors.push("Original price must be greater than selling price")
         }
       }
-
       if (formData.trackQuantity) {
         const stockValue = safeToNumber(formData.stock)
         if (formData.stock === "" || stockValue < 0) {
           errors.push("Stock quantity cannot be negative when quantity tracking is enabled")
         }
       }
-
-      // Check for images - required for new products, optional for updates
       if (!editingProduct && images.length === 0) {
         errors.push("At least one product image is required")
       }
     } else {
-      // Validate variants
       if (formData.variants.length === 0) {
         errors.push("At least one variant is required when variants are enabled")
       }
-
-      // Validate each variant with safe string conversion
       for (let i = 0; i < formData.variants.length; i++) {
         const variant = formData.variants[i]
-
         const variantName = safeToString(variant.name)
         if (!variantName || variantName.trim() === "") {
           errors.push(`Variant ${i + 1}: Name is required`)
         }
-
         const variantPrice = safeToString(variant.price)
         const priceValue = safeToNumber(variantPrice)
         if (!variantPrice || variantPrice.trim() === "" || isNaN(priceValue) || priceValue <= 0) {
           errors.push(`Variant "${variantName}": Valid price is required`)
         }
-
         if (formData.trackQuantity) {
           const variantStock = safeToString(variant.stock || "")
           const stockValue = safeToNumber(variantStock)
@@ -875,13 +778,10 @@ export default function ProductsPage() {
             errors.push(`Variant "${variantName}": Valid stock quantity is required when quantity tracking is enabled`)
           }
         }
-
         const variantSku = safeToString(variant.sku)
         if (!variantSku || variantSku.trim() === "") {
           errors.push(`Variant "${variantName}": SKU is required`)
         }
-
-        // Check for duplicate SKUs
         const currentSku = variantSku.trim().toUpperCase()
         const duplicateSku = formData.variants.find((v, index) => {
           if (index === i) return false
@@ -891,8 +791,6 @@ export default function ProductsPage() {
         if (duplicateSku) {
           errors.push(`Duplicate SKU "${variantSku}" found in variants`)
         }
-
-        // FIXED: Validate originalPrice for variants
         const variantOriginalPrice = safeToString(variant.originalPrice || "")
         if (variantOriginalPrice && variantOriginalPrice.trim() !== "") {
           const originalPriceValue = safeToNumber(variantOriginalPrice)
@@ -903,8 +801,6 @@ export default function ProductsPage() {
           }
         }
       }
-
-      // For variants, check if at least one image exists
       const hasMainImages = images.length > 0
       const hasVariantImages = formData.variants.some((variant) => {
         const variantImage = safeToString(variant.image)
@@ -914,14 +810,11 @@ export default function ProductsPage() {
         errors.push("At least one image is required (either main product images or variant images)")
       }
     }
-
     return errors
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Validate form
     const validationErrors = validateForm()
     if (validationErrors.length > 0) {
       showToast("Validation Error", validationErrors[0], "error")
@@ -932,95 +825,11 @@ export default function ProductsPage() {
     try {
       const submitData = new FormData()
 
-      // Log the data being prepared for submission
-      console.log("🔍 Preparing form data for submission:", {
-        editingProduct: !!editingProduct,
-        productId: editingProduct?._id,
-        hasVariants: formData.hasVariants,
-        variantCount: formData.variants.length,
-        trackQuantity: formData.trackQuantity,
-        formData: {
-          ...formData,
-          variants: formData.variants.map((v) => ({
-            _id: v._id,
-            name: v.name,
-            price: v.price,
-            stock: v.stock,
-            sku: v.sku,
-            isActive: v.isActive,
-          })),
-        },
-      })
-
-      // Enhanced logging before API call
-      console.log("🚀 About to send API request with the following data:")
-      console.log("📋 Form state summary:", {
-        hasVariants: formData.hasVariants,
-        variantCount: formData.variants.length,
-        trackQuantity: formData.trackQuantity,
-        isEditing: !!editingProduct,
-        productId: editingProduct?._id,
-      })
-
-      // Log the exact variants data being sent
-      if (formData.hasVariants) {
-        console.log(
-          "📋 Variants being sent:",
-          formData.variants.map((v) => ({
-            name: v.name,
-            price: v.price,
-            sku: v.sku,
-            stock: v.stock,
-            isActive: v.isActive,
-            hasId: !!v._id,
-            idType: typeof v._id,
-          })),
-        )
-      } else {
-        console.log("📋 hasVariants is false, sending empty variants array")
-      }
-
-      // Log FormData contents for debugging (keep existing code)
-      console.log("📋 FormData contents:")
-      for (const [key, value] of submitData.entries()) {
-        if (key === "variants" || key === "tags" || key === "dimensions") {
-          try {
-            const parsed = JSON.parse(value as string)
-            console.log(`  ${key}:`, parsed)
-            if (key === "variants") {
-              console.log(`  variants length: ${parsed.length}`)
-              console.log(`  variants isEmpty: ${parsed.length === 0}`)
-            }
-          } catch (e) {
-            console.log(`  ${key}: (parse error)`, value)
-          }
-        } else {
-          console.log(`  ${key}:`, value)
-        }
-      }
-
-      // CRITICAL DEBUG: Log the exact hasVariants and variants values being sent
-      console.log("🔍 CRITICAL DEBUG - hasVariants and variants state:")
-      console.log("  formData.hasVariants:", formData.hasVariants, typeof formData.hasVariants)
-      console.log("  formData.variants.length:", formData.variants.length)
-      const hasVariants = document.querySelector<HTMLInputElement>("#hasVariants")?.checked
-      const variants = formData.variants
-      console.log("  hasVariants form field value:", hasVariants)
-      console.log("  variants form field value:", variants)
-
-      // Log what will be sent in FormData
-      console.log("🔍 What will be sent to backend:")
-      console.log("  hasVariants field:", formData.hasVariants.toString())
-      console.log("  variants field will be processed below...")
-
-      // Add all form fields with better validation
       Object.entries(formData).forEach(([key, value]) => {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
         } else if (key === "variants") {
-          // CRITICAL FIX: Only send variants if hasVariants is true
           if (formData.hasVariants) {
-            // ENHANCED: Clean up variants data with more thorough validation
             const cleanedVariants = formData.variants
               .filter((variant) => {
                 const requiredFields = ["name", "price", "sku"]
@@ -1031,10 +840,6 @@ export default function ProductsPage() {
                   const fieldValue = safeToString(variant[field as keyof ProductVariant])
                   return fieldValue && fieldValue.trim() !== ""
                 })
-
-                if (!isValid) {
-                  console.warn("🚨 Filtering out invalid variant:", variant)
-                }
                 return isValid
               })
               .map((variant) => {
@@ -1046,18 +851,12 @@ export default function ProductsPage() {
                   isActive: Boolean(variant.isActive),
                   image: safeToString(variant.image),
                 }
-
-                // Only add stock if quantity tracking is enabled
                 if (formData.trackQuantity && variant.stock !== undefined) {
                   cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
                 }
-
-                // Only add _id if it's a valid MongoDB ObjectId (not temp ID)
                 if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                   cleanVariant._id = variant._id
                 }
-
-                // Only add originalPrice if it's provided and valid
                 const originalPrice = safeToString(variant.originalPrice || "")
                 if (originalPrice && originalPrice.trim() !== "") {
                   const originalPriceNum = Number.parseFloat(originalPrice)
@@ -1065,24 +864,15 @@ export default function ProductsPage() {
                     cleanVariant.originalPrice = originalPriceNum
                   }
                 }
-
                 return cleanVariant
               })
-
-            console.log("🔍 Cleaned variants for backend:", cleanedVariants)
-            console.log("🔍 hasVariants is TRUE, sending variants:", cleanedVariants.length)
             submitData.append(key, JSON.stringify(cleanedVariants))
           } else {
-            // CRITICAL FIX: Send empty array when hasVariants is false
-            console.log("🔍 hasVariants is FALSE, sending empty variants array")
-            console.log("🔍 Current formData.variants length:", formData.variants.length)
-            console.log("🔍 Current formData.hasVariants:", formData.hasVariants)
             submitData.append(key, JSON.stringify([]))
           }
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
         } else if (value !== "" && value !== null && value !== undefined) {
-          // Convert numeric fields to proper numbers
           if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
             const numValue = Number.parseFloat(safeToString(value))
             if (!isNaN(numValue)) {
@@ -1094,10 +884,8 @@ export default function ProductsPage() {
         }
       })
 
-      // Add tags
       submitData.append("tags", JSON.stringify(tags))
 
-      // Add images
       if (images.length > 0) {
         images.forEach((imageUrl) => {
           submitData.append("existingImages", imageUrl)
@@ -1106,7 +894,6 @@ export default function ProductsPage() {
         submitData.append("existingImages", JSON.stringify([]))
       }
 
-      // Add offer only if it's not "none"
       if (formData.offer && formData.offer !== "none") {
         submitData.append("offer", formData.offer)
       }
@@ -1115,27 +902,6 @@ export default function ProductsPage() {
         ? `${API_BASE_URL}/api/admin/products/${editingProduct._id}`
         : `${API_BASE_URL}/api/admin/products`
       const method = editingProduct ? "PUT" : "POST"
-
-      // Log the final request details
-      console.log(`📝 Submitting product data:`, {
-        method,
-        url,
-        hasImages: images.length > 0,
-        imageCount: images.length,
-        hasVariants: formData.hasVariants,
-        variantCount: formData.hasVariants ? formData.variants.length : 0,
-        trackQuantity: formData.trackQuantity,
-      })
-
-      // Log FormData contents for debugging
-      console.log("📋 FormData contents:")
-      for (const [key, value] of submitData.entries()) {
-        if (key === "variants" || key === "tags" || key === "dimensions") {
-          console.log(`  ${key}:`, JSON.parse(value as string))
-        } else {
-          console.log(`  ${key}:`, value)
-        }
-      }
 
       const { response, data } = await makeApiRequest(url, {
         method,
@@ -1158,8 +924,6 @@ export default function ProductsPage() {
     } catch (error) {
       console.error("❌ Submit error:", error)
       const errorMessage = error instanceof Error ? error.message : "Something went wrong. Please try again."
-
-      // Show more specific error message if available
       if (errorMessage.includes("Validation failed")) {
         showToast(
           "Validation Error",
@@ -1179,22 +943,17 @@ export default function ProductsPage() {
     setViewDialogOpen(true)
   }
 
-  // FIXED: Enhanced edit function with proper data handling and safe conversion
   const handleEdit = (product: Product) => {
-    console.log("🔍 Editing product:", product)
-
     setEditingProduct(product)
-
-    // FIXED: Set form data with proper type conversion and fallbacks using safe conversion
     setFormData({
       name: safeToString(product.name),
       sku: safeToString(product.sku),
       shortDescription: safeToString(product.shortDescription),
       description: safeToString(product.description),
-      price: product.hasVariants ? "0" : safeToString(product.price),
-      originalPrice: product.hasVariants ? "" : safeToString(product.originalPrice || ""),
+      price: product.hasVariants ? "" : safeToString(product.price), // Clear if variants
+      originalPrice: product.hasVariants ? "" : safeToString(product.originalPrice || ""), // Clear if variants
       taxPercentage: safeToString(product.taxPercentage || 0),
-      stock: product.hasVariants ? "0" : safeToString(product.stock || ""),
+      stock: product.hasVariants ? "" : safeToString(product.stock || ""), // Clear if variants
       lowStockAlert: safeToString(product.lowStockAlert || 5),
       allowBackorders: Boolean(product.allowBackorders),
       category: safeToString(product.category?._id || ""),
@@ -1223,30 +982,18 @@ export default function ProductsPage() {
         : [],
       trackQuantity: product.trackQuantity !== undefined ? Boolean(product.trackQuantity) : true,
     })
-
-    // Set images and tags with safe copying
     setImages(product.gallery ? [...product.gallery] : [])
     setTags(product.tags ? [...product.tags] : [])
     setTagInput("")
-
-    console.log("✅ Form data set for editing:", {
-      hasVariants: product.hasVariants,
-      variantCount: product.variants?.length || 0,
-      trackQuantity: product.trackQuantity,
-      imageCount: product.gallery?.length || 0,
-    })
-
     setDialogOpen(true)
   }
 
   const handleDelete = async (productId: string) => {
     if (!confirm("Are you sure you want to delete this product? This action cannot be undone.")) return
-
     try {
       const { response } = await makeApiRequest(`${API_BASE_URL}/api/admin/products/${productId}`, {
         method: "DELETE",
       })
-
       if (response.ok) {
         showToast("Product Deleted", "Product has been deleted successfully.", "success")
         fetchProducts()
@@ -1304,7 +1051,6 @@ export default function ProductsPage() {
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
-
     if (stock === 0 && !allowBackorders) {
       return "bg-red-50 text-red-700 border border-red-200"
     } else if (stock <= lowStockAlert && stock > 0) {
@@ -1322,7 +1068,6 @@ export default function ProductsPage() {
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
-
     if (stock === 0 && !allowBackorders) {
       return "Out of Stock"
     } else if (stock <= lowStockAlert && stock > 0) {
@@ -1373,14 +1118,14 @@ export default function ProductsPage() {
   return (
     <AdminLayout>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Products</h1>
             <p className="text-gray-600 text-sm">Manage your product inventory and catalog</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={handleExportProducts}>
               <Download className="h-4 w-4 mr-2" />
               Export
@@ -1396,7 +1141,7 @@ export default function ProductsPage() {
                   Add Product
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-full md:max-w-6xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="border-b border-gray-200 pb-4">
                   <DialogTitle className="flex items-center space-x-2 text-slate-900">
                     <Package className="h-5 w-5 text-slate-600" />
@@ -1408,14 +1153,13 @@ export default function ProductsPage() {
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
                   <Tabs defaultValue="basic" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 bg-gray-100">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 bg-gray-100">
                       <TabsTrigger value="basic">Basic Info</TabsTrigger>
                       <TabsTrigger value="pricing">Pricing</TabsTrigger>
                       <TabsTrigger value="media">Images</TabsTrigger>
                       <TabsTrigger value="variants">Variants</TabsTrigger>
                       <TabsTrigger value="seo">SEO & More</TabsTrigger>
                     </TabsList>
-
                     {/* Basic Information Tab */}
                     <TabsContent value="basic" className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1455,7 +1199,6 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="shortDescription">Short Description *</Label>
                         <Textarea
@@ -1471,7 +1214,6 @@ export default function ProductsPage() {
                         />
                         <p className="text-xs text-gray-500">{formData.shortDescription.length}/200 characters</p>
                       </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="description">Full Description *</Label>
                         <Textarea
@@ -1485,7 +1227,6 @@ export default function ProductsPage() {
                           className="border-gray-300"
                         />
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Category *</Label>
@@ -1523,7 +1264,6 @@ export default function ProductsPage() {
                           </Select>
                         </div>
                       </div>
-
                       {/* Quantity Tracking Toggle */}
                       <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg border">
                         <div className="flex items-center space-x-2">
@@ -1550,7 +1290,6 @@ export default function ProductsPage() {
                           </p>
                         </div>
                       </div>
-
                       {/* Tags */}
                       <div className="space-y-2">
                         <Label>Product Tags</Label>
@@ -1583,7 +1322,6 @@ export default function ProductsPage() {
                         )}
                       </div>
                     </TabsContent>
-
                     {/* Pricing Tab */}
                     <TabsContent value="pricing" className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1636,7 +1374,6 @@ export default function ProductsPage() {
                           />
                         </div>
                       </div>
-
                       {/* Stock fields only show when quantity tracking is enabled */}
                       {formData.trackQuantity && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1684,7 +1421,6 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       )}
-
                       {!formData.trackQuantity && (
                         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                           <div className="flex items-center space-x-2">
@@ -1697,7 +1433,6 @@ export default function ProductsPage() {
                           </p>
                         </div>
                       )}
-
                       {formData.trackQuantity && (
                         <div className="flex items-center space-x-2">
                           <Checkbox
@@ -1710,7 +1445,6 @@ export default function ProductsPage() {
                           </Label>
                         </div>
                       )}
-
                       {/* Dimensions */}
                       <div className="space-y-2">
                         <Label>Dimensions (cm)</Label>
@@ -1742,7 +1476,6 @@ export default function ProductsPage() {
                         </div>
                       </div>
                     </TabsContent>
-
                     {/* Images Tab */}
                     <TabsContent value="media" className="space-y-4">
                       <div className="space-y-2">
@@ -1754,7 +1487,6 @@ export default function ProductsPage() {
                       </div>
                       <ImageUpload images={images} onImagesChange={setImages} maxImages={10} />
                     </TabsContent>
-
                     {/* Variants Tab */}
                     <TabsContent value="variants" className="space-y-4">
                       <div className="flex items-center space-x-2 mb-4">
@@ -1769,7 +1501,6 @@ export default function ProductsPage() {
                           This product has variants (e.g., different sizes, colors)
                         </Label>
                       </div>
-
                       {formData.hasVariants && (
                         <Card className="border border-gray-200 shadow-sm">
                           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1785,93 +1516,94 @@ export default function ProductsPage() {
                                 No variants added yet. Click "Add Variant" to create one.
                               </div>
                             ) : (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Variant Name</TableHead>
-                                    <TableHead>Price</TableHead>
-                                    {formData.trackQuantity && <TableHead>Stock</TableHead>}
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead>Image</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {formData.variants.map((variant, index) => (
-                                    <TableRow key={variant._id || index}>
-                                      <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
-                                      <TableCell>
-                                        <div className="flex flex-col">
-                                          <span className="font-semibold">
-                                            {formatCurrency(safeToNumber(variant.price))}
-                                          </span>
-                                          {variant.originalPrice &&
-                                            safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
-                                              <span className="text-xs text-gray-500 line-through">
-                                                {formatCurrency(safeToNumber(variant.originalPrice))}
-                                              </span>
-                                            )}
-                                        </div>
-                                      </TableCell>
-                                      {formData.trackQuantity && (
-                                        <TableCell>{safeToString(variant.stock || "0")}</TableCell>
-                                      )}
-                                      <TableCell>
-                                        <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                                          {safeToString(variant.sku)}
-                                        </code>
-                                      </TableCell>
-                                      <TableCell>
-                                        {variant.image ? (
-                                          <img
-                                            src={variant.image || "/placeholder.svg"}
-                                            alt={safeToString(variant.name)}
-                                            className="w-10 h-10 object-cover rounded"
-                                          />
-                                        ) : (
-                                          <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
-                                            No Img
-                                          </div>
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge variant={variant.isActive ? "default" : "secondary"}>
-                                          {variant.isActive ? "Active" : "Inactive"}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell>
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                              <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleEditVariantClick(variant)}>
-                                              <Edit className="h-4 w-4 mr-2" />
-                                              Edit
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              onClick={() => handleDeleteVariant(variant)}
-                                              className="text-red-600 focus:text-red-600"
-                                            >
-                                              <Trash2 className="h-4 w-4 mr-2" />
-                                              Delete
-                                            </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      </TableCell>
+                              <div className="overflow-x-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Variant Name</TableHead>
+                                      <TableHead>Price</TableHead>
+                                      {formData.trackQuantity && <TableHead>Stock</TableHead>}
+                                      <TableHead>SKU</TableHead>
+                                      <TableHead>Image</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {formData.variants.map((variant, index) => (
+                                      <TableRow key={variant._id || index}>
+                                        <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
+                                        <TableCell>
+                                          <div className="flex flex-col">
+                                            <span className="font-semibold">
+                                              {formatCurrency(safeToNumber(variant.price))}
+                                            </span>
+                                            {variant.originalPrice &&
+                                              safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
+                                                <span className="text-xs text-gray-500 line-through">
+                                                  {formatCurrency(safeToNumber(variant.originalPrice))}
+                                                </span>
+                                              )}
+                                          </div>
+                                        </TableCell>
+                                        {formData.trackQuantity && (
+                                          <TableCell>{safeToString(variant.stock || "0")}</TableCell>
+                                        )}
+                                        <TableCell>
+                                          <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                                            {safeToString(variant.sku)}
+                                          </code>
+                                        </TableCell>
+                                        <TableCell>
+                                          {variant.image ? (
+                                            <img
+                                              src={variant.image || "/placeholder.svg"}
+                                              alt={safeToString(variant.name)}
+                                              className="w-10 h-10 object-cover rounded"
+                                            />
+                                          ) : (
+                                            <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                                              No Img
+                                            </div>
+                                          )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant={variant.isActive ? "default" : "secondary"}>
+                                            {variant.isActive ? "Active" : "Inactive"}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <MoreHorizontal className="h-4 w-4" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              <DropdownMenuItem onClick={() => handleEditVariantClick(variant)}>
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Edit
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                onClick={() => handleDeleteVariant(variant)}
+                                                className="text-red-600 focus:text-red-600"
+                                              >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
                             )}
                           </CardContent>
                         </Card>
                       )}
                     </TabsContent>
-
                     {/* SEO Tab */}
                     <TabsContent value="seo" className="space-y-4">
                       <div className="space-y-2">
@@ -1903,7 +1635,6 @@ export default function ProductsPage() {
                       </div>
                     </TabsContent>
                   </Tabs>
-
                   {/* Form Actions */}
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                     <Button
@@ -1932,10 +1663,9 @@ export default function ProductsPage() {
                 </form>
               </DialogContent>
             </Dialog>
-
             {/* Variant Add/Edit Dialog */}
             <Dialog open={isVariantDialogOpen} onOpenChange={setIsVariantDialogOpen}>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-full sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>{editingVariant?._id ? "Edit Variant" : "Add New Variant"}</DialogTitle>
                   <DialogDescription>Define the details for this product variant.</DialogDescription>
@@ -1953,7 +1683,7 @@ export default function ProductsPage() {
                         required
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="variantPrice">Price (₹) *</Label>
                         <Input
@@ -1980,7 +1710,7 @@ export default function ProductsPage() {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {formData.trackQuantity && (
                         <div className="space-y-2">
                           <Label htmlFor="variantStock">Stock Quantity *</Label>
@@ -2058,10 +1788,9 @@ export default function ProductsPage() {
             </Dialog>
           </div>
         </div>
-
         {/* View Product Dialog */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-full md:max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader className="border-b border-gray-200 pb-4">
               <DialogTitle className="flex items-center space-x-2 text-slate-900">
                 <Eye className="h-5 w-5 text-slate-600" />
@@ -2130,14 +1859,12 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 </div>
-
                 {/* Description */}
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Description</h3>
                   <p className="text-gray-700 mb-2">{viewingProduct.shortDescription}</p>
                   <p className="text-gray-600 text-sm">{viewingProduct.description}</p>
                 </div>
-
                 {/* Pricing & Stock */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -2185,70 +1912,70 @@ export default function ProductsPage() {
                     </div>
                   )}
                 </div>
-
                 {/* Variants Display */}
                 {viewingProduct.hasVariants && viewingProduct.variants.length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Variants</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Price</TableHead>
-                          {viewingProduct.trackQuantity && <TableHead>Stock</TableHead>}
-                          <TableHead>SKU</TableHead>
-                          <TableHead>Image</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {viewingProduct.variants.map((variant, index) => (
-                          <TableRow key={variant._id || index}>
-                            <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-semibold">{formatCurrency(safeToNumber(variant.price))}</span>
-                                {variant.originalPrice &&
-                                  safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
-                                    <span className="text-xs text-gray-500 line-through">
-                                      {formatCurrency(safeToNumber(variant.originalPrice))}
-                                    </span>
-                                  )}
-                              </div>
-                            </TableCell>
-                            {viewingProduct.trackQuantity && (
-                              <TableCell>{safeToString(variant.stock || "0")}</TableCell>
-                            )}
-                            <TableCell>
-                              <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                                {safeToString(variant.sku)}
-                              </code>
-                            </TableCell>
-                            <TableCell>
-                              {variant.image ? (
-                                <img
-                                  src={variant.image || "/placeholder.svg"}
-                                  alt={safeToString(variant.name)}
-                                  className="w-10 h-10 object-cover rounded"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
-                                  No Img
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={variant.isActive ? "default" : "secondary"}>
-                                {variant.isActive ? "Active" : "Inactive"}
-                              </Badge>
-                            </TableCell>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Price</TableHead>
+                            {viewingProduct.trackQuantity && <TableHead>Stock</TableHead>}
+                            <TableHead>SKU</TableHead>
+                            <TableHead>Image</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {viewingProduct.variants.map((variant, index) => (
+                            <TableRow key={variant._id || index}>
+                              <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold">{formatCurrency(safeToNumber(variant.price))}</span>
+                                  {variant.originalPrice &&
+                                    safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
+                                      <span className="text-xs text-gray-500 line-through">
+                                        {formatCurrency(safeToNumber(variant.originalPrice))}
+                                      </span>
+                                    )}
+                                </div>
+                              </TableCell>
+                              {viewingProduct.trackQuantity && (
+                                <TableCell>{safeToString(variant.stock || "0")}</TableCell>
+                              )}
+                              <TableCell>
+                                <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                                  {safeToString(variant.sku)}
+                                </code>
+                              </TableCell>
+                              <TableCell>
+                                {variant.image ? (
+                                  <img
+                                    src={variant.image || "/placeholder.svg"}
+                                    alt={safeToString(variant.name)}
+                                    className="w-10 h-10 object-cover rounded"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                                    No Img
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={variant.isActive ? "default" : "secondary"}>
+                                  {variant.isActive ? "Active" : "Inactive"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
-
                 {/* Tags */}
                 {viewingProduct.tags.length > 0 && (
                   <div>
@@ -2262,7 +1989,6 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
-
                 {/* Offer */}
                 {viewingProduct.offer && (
                   <div>
@@ -2277,7 +2003,6 @@ export default function ProductsPage() {
             )}
           </DialogContent>
         </Dialog>
-
         {/* Filters */}
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="p-4">
@@ -2293,11 +2018,11 @@ export default function ProductsPage() {
                   />
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center space-x-2">
                   <Filter className="h-4 w-4 text-gray-500" />
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-40 border-gray-300">
+                    <SelectTrigger className="w-full sm:w-40 border-gray-300">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2311,7 +2036,7 @@ export default function ProductsPage() {
                   </Select>
                 </div>
                 <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-36 border-gray-300">
+                  <SelectTrigger className="w-full sm:w-36 border-gray-300">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2326,7 +2051,6 @@ export default function ProductsPage() {
             </div>
           </CardContent>
         </Card>
-
         {/* Products Table */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="border-b border-gray-200 bg-white">
@@ -2373,13 +2097,12 @@ export default function ProductsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-200">
-                      <TableHead className="font-medium text-slate-700">Product</TableHead>
-                      <TableHead className="font-medium text-slate-700">SKU</TableHead>
-                      <TableHead className="font-medium text-slate-700">Category</TableHead>
-                      <TableHead className="font-medium text-slate-700">Price</TableHead>
-                      <TableHead className="font-medium text-slate-700">Stock</TableHead>
-                      <TableHead className="font-medium text-slate-700">Status</TableHead>
-                      <TableHead className="font-medium text-slate-700">Offer</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[180px]">Product</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[100px]">SKU</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[120px]">Category</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[120px]">Price</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[120px]">Stock</TableHead>
+                      <TableHead className="font-medium text-slate-700 min-w-[100px]">Offer</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
