@@ -508,17 +508,6 @@ export default function ProductsPage() {
     setFilteredProducts(filtered)
   }
 
-  const validateAndFixPricing = () => {
-    if (!formData.hasVariants) {
-      const priceValue = safeToNumber(formData.price)
-      const originalPriceValue = safeToNumber(formData.originalPrice)
-      if (formData.originalPrice && originalPriceValue <= priceValue) {
-        setFormData((prev) => ({ ...prev, originalPrice: "" }))
-        showToast("Price Adjusted", "MRP was cleared because it must be greater than selling price", "warning")
-      }
-    }
-  }
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | React.ChangeEvent<HTMLTextAreaElement>>) => {
     const { name, value } = e.target
     if (name.startsWith("dimensions.")) {
@@ -531,12 +520,21 @@ export default function ProductsPage() {
         },
       }))
     } else {
-      setFormData((prev) => ({ ...prev, [name]: value }))
-      if (name === "price" || name === "originalPrice") {
-        setTimeout(() => {
-          validateAndFixPricing()
-        }, 100)
-      }
+      setFormData((prev) => {
+        const newFormData = { ...prev, [name]: value }
+        // Apply pricing validation immediately and synchronously
+        if (name === "price" || name === "originalPrice") {
+          if (!newFormData.hasVariants) {
+            const priceValue = safeToNumber(newFormData.price)
+            const originalPriceValue = safeToNumber(newFormData.originalPrice)
+            if (newFormData.originalPrice && originalPriceValue <= priceValue) {
+              newFormData.originalPrice = "" // Clear MRP
+              showToast("Price Adjusted", "MRP was cleared because it must be greater than selling price", "warning")
+            }
+          }
+        }
+        return newFormData
+      })
     }
   }
 
