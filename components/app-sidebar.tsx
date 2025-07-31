@@ -45,16 +45,6 @@ import {
   Wifi,
   WifiOff,
   Zap,
-  MessageSquare,
-  BarChart3,
-  Mail,
-  Calendar,
-  FileText,
-  Camera,
-  Megaphone,
-  Smartphone,
-  Globe,
-  Sparkles,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -144,13 +134,15 @@ export function AppSidebar() {
     )
   }
 
-  // Handle coming soon apps
-  const handleComingSoonApp = (appName: string) => {
+  // Handle apps & integrations click
+  const handleAppsClick = () => {
     toast({
-      title: "🚀 Coming Soon!",
-      description: `${appName} is currently in development. Stay tuned for updates!`,
+      title: "🚀 Apps & Integrations",
+      description: "Advanced features and integrations are coming soon! Stay tuned for updates.",
       duration: 4000,
     })
+    // Close mobile sidebar after interaction
+    setOpenMobile(false)
   }
 
   // Network status monitoring
@@ -360,76 +352,15 @@ export function AppSidebar() {
           href: "/payments",
           icon: CreditCard,
         },
+        {
+          name: "Apps & Integrations",
+          href: "#",
+          icon: Zap,
+          isComingSoon: true,
+        },
       ],
     },
   ]
-
-  // Apps section - coming soon features
-  const appsSection = {
-    title: "Apps & Integrations",
-    items: [
-      {
-        name: "Analytics Pro",
-        icon: BarChart3,
-        description: "Advanced analytics and reporting",
-        comingSoon: true,
-      },
-      {
-        name: "Email Marketing",
-        icon: Mail,
-        description: "Automated email campaigns",
-        comingSoon: true,
-      },
-      {
-        name: "Live Chat",
-        icon: MessageSquare,
-        description: "Customer support chat",
-        comingSoon: true,
-      },
-      {
-        name: "Social Media",
-        icon: Megaphone,
-        description: "Social media management",
-        comingSoon: true,
-      },
-      {
-        name: "Mobile App",
-        icon: Smartphone,
-        description: "Native mobile application",
-        comingSoon: true,
-      },
-      {
-        name: "SEO Tools",
-        icon: Globe,
-        description: "Search engine optimization",
-        comingSoon: true,
-      },
-      {
-        name: "Content Creator",
-        icon: Camera,
-        description: "AI-powered content generation",
-        comingSoon: true,
-      },
-      {
-        name: "Appointment Booking",
-        icon: Calendar,
-        description: "Schedule and manage appointments",
-        comingSoon: true,
-      },
-      {
-        name: "Invoice Generator",
-        icon: FileText,
-        description: "Professional invoice creation",
-        comingSoon: true,
-      },
-      {
-        name: "AI Assistant",
-        icon: Sparkles,
-        description: "Smart business assistant",
-        comingSoon: true,
-      },
-    ],
-  }
 
   // Store status skeleton - minimal loading state
   const StoreStatusSkeleton = () => (
@@ -460,7 +391,7 @@ export function AppSidebar() {
   )
 
   return (
-    <Sidebar className="bg-slate-900 border-r border-slate-700" collapsible="none" variant="sidebar">
+    <Sidebar className="bg-slate-900 border-r border-slate-700" collapsible="icon" variant="sidebar">
       <SidebarHeader className="border-b border-slate-700 px-4 sm:px-6 py-4 sm:py-6 bg-slate-900">
         <YespLogo />
         <div className="flex items-center gap-2 mt-2 sm:mt-3">
@@ -498,8 +429,8 @@ export function AppSidebar() {
 
         {/* Main Navigation */}
         {navigation.map((section) => (
-          <SidebarGroup key={section.title} className="mb-6">
-            <SidebarGroupLabel className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+          <SidebarGroup key={section.title} className="mb-4">
+            <SidebarGroupLabel className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2 group-data-[collapsible=icon]:hidden">
               {section.title}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -507,20 +438,38 @@ export function AppSidebar() {
                 {section.items.map((item) => (
                   <SidebarMenuItem key={item.name}>
                     <SidebarMenuButton
-                      asChild
-                      isActive={pathname === item.href}
-                      className="w-full justify-start text-slate-300 hover:text-white hover:bg-slate-700 data-[active=true]:bg-white data-[active=true]:text-slate-900 data-[active=true]:shadow-lg h-10 sm:h-9 px-3 rounded-lg"
+                      asChild={!item.isComingSoon}
+                      isActive={pathname === item.href && !item.isComingSoon}
+                      onClick={item.isComingSoon ? handleAppsClick : undefined}
+                      className="w-full justify-start text-slate-300 hover:text-white hover:bg-slate-700 data-[active=true]:bg-white data-[active=true]:text-slate-900 data-[active=true]:shadow-lg h-10 sm:h-9 px-3 rounded-lg group"
+                      tooltip={item.isComingSoon ? "Apps & Integrations - Coming Soon!" : item.name}
                     >
-                      <Link
-                        href={item.href}
-                        className="flex items-center justify-between w-full"
-                        onClick={handleNavigation}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <item.icon className="w-4 h-4 flex-shrink-0" />
-                          <span className="text-sm font-medium">{item.name}</span>
+                      {item.isComingSoon ? (
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center space-x-3">
+                            <item.icon className="w-4 h-4 flex-shrink-0" />
+                            <span className="text-sm font-medium group-data-[collapsible=icon]:hidden">
+                              {item.name}
+                            </span>
+                          </div>
+                          <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs group-data-[collapsible=icon]:hidden">
+                            Soon
+                          </Badge>
                         </div>
-                      </Link>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          className="flex items-center justify-between w-full"
+                          onClick={handleNavigation}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <item.icon className="w-4 h-4 flex-shrink-0" />
+                            <span className="text-sm font-medium group-data-[collapsible=icon]:hidden">
+                              {item.name}
+                            </span>
+                          </div>
+                        </Link>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
@@ -528,37 +477,6 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-
-        {/* Apps Section */}
-        <SidebarGroup className="mb-4">
-          <SidebarGroupLabel className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center">
-            <Zap className="w-3 h-3 mr-2" />
-            {appsSection.title}
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
-              {appsSection.items.map((app) => (
-                <SidebarMenuItem key={app.name}>
-                  <SidebarMenuButton
-                    onClick={() => handleComingSoonApp(app.name)}
-                    className="w-full justify-start text-slate-300 hover:text-white hover:bg-slate-700 h-10 sm:h-9 px-3 rounded-lg cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center space-x-3">
-                        <app.icon className="w-4 h-4 flex-shrink-0" />
-                        <div className="flex flex-col items-start">
-                          <span className="text-sm font-medium">{app.name}</span>
-                          <span className="text-xs text-slate-500 group-hover:text-slate-400">{app.description}</span>
-                        </div>
-                      </div>
-                      <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">Soon</Badge>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-slate-700 p-3 sm:p-4 bg-slate-900">
@@ -567,7 +485,7 @@ export function AppSidebar() {
           <StoreStatusSkeleton />
         ) : (
           storeData && (
-            <div className="mb-4 p-3 sm:p-4 bg-slate-800 rounded-xl border border-slate-600 hover:bg-slate-750">
+            <div className="mb-4 p-3 sm:p-4 bg-slate-800 rounded-xl border border-slate-600 hover:bg-slate-750 group-data-[collapsible=icon]:hidden">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white truncate">{storeData.storeName}</p>
@@ -599,17 +517,17 @@ export function AppSidebar() {
             ) : (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="w-full justify-between text-slate-300 hover:text-white hover:bg-slate-700 h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800 shadow-sm">
-                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <SidebarMenuButton className="w-full justify-between text-slate-300 hover:text-white hover:bg-slate-700 h-12 px-3 sm:px-4 rounded-xl border border-slate-600 bg-slate-800 shadow-sm group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1 group-data-[collapsible=icon]:space-x-0">
                       <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-500/20">
                         <User className="w-4 h-4 text-white" />
                       </div>
-                      <div className="text-left min-w-0 flex-1">
+                      <div className="text-left min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                         <div className="text-sm font-semibold text-white truncate">{userData?.name || "Account"}</div>
                         <div className="text-xs text-slate-400 truncate">{userData?.email || "user@example.com"}</div>
                       </div>
                     </div>
-                    <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400 group-data-[collapsible=icon]:hidden" />
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64 p-2 bg-slate-800 border-slate-600">
