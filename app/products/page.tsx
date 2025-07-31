@@ -213,7 +213,7 @@ export default function ProductsPage() {
     shortDescription: "",
     description: "",
     price: "",
-    originalPrice: "",
+    originalPrice: "", // This will be MRP
     taxPercentage: "",
     stock: "",
     lowStockAlert: "5",
@@ -338,6 +338,7 @@ export default function ProductsPage() {
     const defaultHeaders: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     }
+    // Only set Content-Type to application/json if body is not FormData
     if (!(options.body instanceof FormData)) {
       defaultHeaders["Content-Type"] = "application/json"
     }
@@ -360,7 +361,7 @@ export default function ProductsPage() {
         } catch (parseError) {
           console.error(`❌ JSON parse error:`, parseError)
           if (response.ok) {
-            data = {}
+            data = {} // If response is OK but JSON is invalid, treat as empty object
           } else {
             throw new Error(`Invalid JSON response: ${responseText}`)
           }
@@ -513,11 +514,7 @@ export default function ProductsPage() {
       const originalPriceValue = safeToNumber(formData.originalPrice)
       if (formData.originalPrice && originalPriceValue <= priceValue) {
         setFormData((prev) => ({ ...prev, originalPrice: "" }))
-        showToast(
-          "Price Adjusted",
-          "Original price was cleared because it must be greater than selling price",
-          "warning",
-        )
+        showToast("Price Adjusted", "MRP was cleared because it must be greater than selling price", "warning")
       }
     }
   }
@@ -627,11 +624,7 @@ export default function ProductsPage() {
         const originalPriceValue = safeToNumber(updated.originalPrice || "")
         if (updated.originalPrice && originalPriceValue <= priceValue) {
           updated.originalPrice = ""
-          showToast(
-            "Price Adjusted",
-            "Original price was cleared because it must be greater than selling price",
-            "warning",
-          )
+          showToast("Price Adjusted", "MRP was cleared because it must be greater than selling price", "warning")
         }
       }
       return updated
@@ -737,14 +730,14 @@ export default function ProductsPage() {
     if (!formData.hasVariants) {
       const priceValue = safeToNumber(formData.price)
       if (!formData.price || priceValue <= 0) {
-        errors.push("Price must be greater than 0")
+        errors.push("Selling Price must be greater than 0")
       }
       if (formData.originalPrice && formData.originalPrice.trim() !== "") {
         const originalPriceValue = safeToNumber(formData.originalPrice)
         if (isNaN(originalPriceValue) || originalPriceValue <= 0) {
-          errors.push("Original price must be a valid positive number")
+          errors.push("MRP must be a valid positive number")
         } else if (originalPriceValue <= priceValue) {
-          errors.push("Original price must be greater than selling price")
+          errors.push("MRP must be greater than Selling Price")
         }
       }
       if (formData.trackQuantity) {
@@ -769,7 +762,7 @@ export default function ProductsPage() {
         const variantPrice = safeToString(variant.price)
         const priceValue = safeToNumber(variantPrice)
         if (!variantPrice || variantPrice.trim() === "" || isNaN(priceValue) || priceValue <= 0) {
-          errors.push(`Variant "${variantName}": Valid price is required`)
+          errors.push(`Variant "${variantName}": Valid Selling Price is required`)
         }
         if (formData.trackQuantity) {
           const variantStock = safeToString(variant.stock || "")
@@ -795,9 +788,9 @@ export default function ProductsPage() {
         if (variantOriginalPrice && variantOriginalPrice.trim() !== "") {
           const originalPriceValue = safeToNumber(variantOriginalPrice)
           if (isNaN(originalPriceValue) || originalPriceValue <= 0) {
-            errors.push(`Variant "${variantName}": Original price must be a valid positive number`)
+            errors.push(`Variant "${variantName}": MRP must be a valid positive number`)
           } else if (originalPriceValue <= priceValue) {
-            errors.push(`Variant "${variantName}": Original price must be greater than selling price`)
+            errors.push(`Variant "${variantName}": MRP must be greater than Selling Price`)
           }
         }
       }
@@ -825,6 +818,7 @@ export default function ProductsPage() {
     try {
       const submitData = new FormData()
 
+      // Append all form data fields
       Object.entries(formData).forEach(([key, value]) => {
         if (key === "dimensions") {
           submitData.append(key, JSON.stringify(value))
@@ -832,6 +826,7 @@ export default function ProductsPage() {
           if (formData.hasVariants) {
             const cleanedVariants = formData.variants
               .filter((variant) => {
+                // Ensure required fields for variants are present
                 const requiredFields = ["name", "price", "sku"]
                 if (formData.trackQuantity) {
                   requiredFields.push("stock")
@@ -843,9 +838,10 @@ export default function ProductsPage() {
                 return isValid
               })
               .map((variant) => {
+                // Convert numeric fields to actual numbers
                 const cleanVariant: any = {
                   name: safeToString(variant.name).trim(),
-                  options: [safeToString(variant.name).trim()],
+                  options: variant.options || [safeToString(variant.name).trim()],
                   price: Number.parseFloat(safeToString(variant.price)) || 0,
                   sku: safeToString(variant.sku).trim().toUpperCase(),
                   isActive: Boolean(variant.isActive),
@@ -868,7 +864,7 @@ export default function ProductsPage() {
               })
             submitData.append(key, JSON.stringify(cleanedVariants))
           } else {
-            submitData.append(key, JSON.stringify([]))
+            submitData.append(key, JSON.stringify([])) // Send empty array if no variants
           }
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
@@ -885,14 +881,7 @@ export default function ProductsPage() {
       })
 
       submitData.append("tags", JSON.stringify(tags))
-
-      if (images.length > 0) {
-        images.forEach((imageUrl) => {
-          submitData.append("existingImages", imageUrl)
-        })
-      } else {
-        submitData.append("existingImages", JSON.stringify([]))
-      }
+      submitData.append("gallery", JSON.stringify(images)) // Send main product images as a JSON array
 
       if (formData.offer && formData.offer !== "none") {
         submitData.append("offer", formData.offer)
@@ -907,6 +896,7 @@ export default function ProductsPage() {
         method,
         body: submitData,
         headers: {
+          // Content-Type is automatically set to multipart/form-data when using FormData
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       })
@@ -1326,6 +1316,21 @@ export default function ProductsPage() {
                     <TabsContent value="pricing" className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
+                          <Label htmlFor="originalPrice">MRP (₹)</Label>
+                          <Input
+                            id="originalPrice"
+                            name="originalPrice"
+                            type="number"
+                            step="0.01"
+                            value={formData.originalPrice}
+                            onChange={handleInputChange}
+                            placeholder="0.00"
+                            className="border-gray-300"
+                            disabled={formData.hasVariants}
+                          />
+                          {formData.hasVariants && <p className="text-xs text-gray-500">MRP is managed by variants.</p>}
+                        </div>
+                        <div className="space-y-2">
                           <Label htmlFor="price">Selling Price (₹) *</Label>
                           <Input
                             id="price"
@@ -1340,24 +1345,7 @@ export default function ProductsPage() {
                             disabled={formData.hasVariants}
                           />
                           {formData.hasVariants && (
-                            <p className="text-xs text-gray-500">Price is managed by variants.</p>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="originalPrice">Original Price (₹)</Label>
-                          <Input
-                            id="originalPrice"
-                            name="originalPrice"
-                            type="number"
-                            step="0.01"
-                            value={formData.originalPrice}
-                            onChange={handleInputChange}
-                            placeholder="0.00"
-                            className="border-gray-300"
-                            disabled={formData.hasVariants}
-                          />
-                          {formData.hasVariants && (
-                            <p className="text-xs text-gray-500">Original price is managed by variants.</p>
+                            <p className="text-xs text-gray-500">Selling Price is managed by variants.</p>
                           )}
                         </div>
                         <div className="space-y-2">
@@ -1521,7 +1509,7 @@ export default function ProductsPage() {
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead>Variant Name</TableHead>
-                                      <TableHead>Price</TableHead>
+                                      <TableHead>Selling Price</TableHead>
                                       {formData.trackQuantity && <TableHead>Stock</TableHead>}
                                       <TableHead>SKU</TableHead>
                                       <TableHead>Image</TableHead>
@@ -1685,7 +1673,19 @@ export default function ProductsPage() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="variantPrice">Price (₹) *</Label>
+                        <Label htmlFor="variantOriginalPrice">MRP (₹)</Label>
+                        <Input
+                          id="variantOriginalPrice"
+                          name="originalPrice"
+                          type="number"
+                          step="0.01"
+                          value={safeToString(editingVariant.originalPrice || "")}
+                          onChange={handleVariantFormChange}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="variantPrice">Selling Price (₹) *</Label>
                         <Input
                           id="variantPrice"
                           name="price"
@@ -1695,18 +1695,6 @@ export default function ProductsPage() {
                           onChange={handleVariantFormChange}
                           placeholder="0.00"
                           required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="variantOriginalPrice">Original Price (₹)</Label>
-                        <Input
-                          id="variantOriginalPrice"
-                          name="originalPrice"
-                          type="number"
-                          step="0.01"
-                          value={safeToString(editingVariant.originalPrice || "")}
-                          onChange={handleVariantFormChange}
-                          placeholder="0.00"
                         />
                       </div>
                     </div>
@@ -1876,7 +1864,7 @@ export default function ProductsPage() {
                       </div>
                       {viewingProduct.originalPrice && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Original Price:</span>
+                          <span className="text-gray-500">MRP:</span>
                           <span className="line-through text-gray-400">
                             {formatCurrency(viewingProduct.originalPrice)}
                           </span>
@@ -1921,7 +1909,7 @@ export default function ProductsPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Name</TableHead>
-                            <TableHead>Price</TableHead>
+                            <TableHead>Selling Price</TableHead>
                             {viewingProduct.trackQuantity && <TableHead>Stock</TableHead>}
                             <TableHead>SKU</TableHead>
                             <TableHead>Image</TableHead>
