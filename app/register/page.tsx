@@ -291,11 +291,27 @@ export default function RegisterPage() {
     return errorMessage
   }
 
-  // Enhanced OTP input handling
+  // Enhanced OTP input handling with paste support
   const handleOtpChange = (value: string) => {
     // Only allow digits and limit to 6 characters
     const cleanValue = value.replace(/\D/g, "").slice(0, 6)
     setOtp(cleanValue)
+  }
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pastedData = e.clipboardData.getData("text")
+    // Extract only digits from pasted content
+    const cleanValue = pastedData.replace(/\D/g, "").slice(0, 6)
+    setOtp(cleanValue)
+
+    // Show success message if valid OTP length
+    if (cleanValue.length === 6) {
+      toast({
+        title: "OTP pasted successfully!",
+        description: "6-digit code has been entered.",
+      })
+    }
   }
 
   const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -622,6 +638,7 @@ export default function RegisterPage() {
                         placeholder="000000"
                         value={otp}
                         onChange={(e) => handleOtpChange(e.target.value)}
+                        onPaste={handleOtpPaste}
                         onKeyDown={handleOtpKeyDown}
                         className="w-48 h-14 text-center text-2xl font-mono tracking-widest border-2 border-gray-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 rounded-lg"
                         maxLength={6}
@@ -631,6 +648,7 @@ export default function RegisterPage() {
                     <div className="text-center">
                       <div className="text-xs text-gray-500 mb-2">{otp.length}/6 digits entered</div>
                       <Progress value={(otp.length / 6) * 100} className="w-48 mx-auto h-1" />
+                      <div className="text-xs text-slate-500 mt-2">💡 Tip: You can paste your OTP code directly</div>
                     </div>
                   </div>
 
