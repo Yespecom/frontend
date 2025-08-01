@@ -1037,7 +1037,9 @@ export default function ProductsPage() {
       shortDescription: safeToString(product.shortDescription),
       description: safeToString(product.description),
       price: product.hasVariants ? "" : safeToString(product.price), // Clear if variants
-      originalPrice: product.hasVariants ? "" : safeToString(product.originalPrice || ""), // Clear if variants
+      // FIX: If originalPrice is 0, treat it as empty string to avoid validation issues
+      originalPrice:
+        !product.hasVariants && product.originalPrice === 0 ? "" : safeToString(product.originalPrice || ""),
       taxPercentage: safeToString(product.taxPercentage || 0),
       stock: product.hasVariants ? "" : safeToString(product.stock || ""), // Clear if variants
       lowStockAlert: safeToString(product.lowStockAlert || 5),
