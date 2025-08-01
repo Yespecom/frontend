@@ -1,7 +1,7 @@
 "use client"
 import { DialogTrigger } from "@/components/ui/dialog"
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react" // Added useCallback
 import { useRouter } from "next/navigation"
 import AdminLayout from "@/components/admin-layout"
 import ImageUpload from "@/components/image-upload"
@@ -71,6 +71,7 @@ interface Product {
   hasVariants: boolean
   variants: ProductVariant[]
   trackQuantity: boolean
+  variantAttributes: { name: string; values: string[] }[]
 }
 
 interface Category {
@@ -96,7 +97,7 @@ interface Toast {
 interface ProductVariant {
   _id?: string
   name: string
-  options?: string[]
+  options: { attributeName: string; value: string }[] // Changed to non-optional
   price: string
   originalPrice?: string
   stock?: string
@@ -231,6 +232,7 @@ export default function ProductsPage() {
     hasVariants: false,
     variants: [] as ProductVariant[],
     trackQuantity: true,
+    variantAttributes: [] as { name: string; values: string[] }[],
   })
   const [images, setImages] = useState<string[]>([])
   const [tags, setTags] = useState<string[]>([])
@@ -411,12 +413,15 @@ export default function ProductsPage() {
   const generateVariantSKU = () => {
     if (!editingVariant) return
     const baseSKU = formData.sku || "PRD"
-    const variantName = editingVariant.name
+    // Generate variant SKU from options if available, otherwise from name
+    const variantOptionString =
+      editingVariant.options?.map((opt) => opt.value).join("-") || editingVariant.name || "VAR"
+    const variantNamePart = variantOptionString
       .replace(/[^a-zA-Z0-9]/g, "")
       .toUpperCase()
       .slice(0, 6)
     const timestamp = Date.now().toString().slice(-4)
-    const newSKU = `${baseSKU}-${variantName}${timestamp}`
+    const newSKU = `${baseSKU}-${variantNamePart}${timestamp}`
     setEditingVariant((prev) => {
       if (!prev) return null
       return { ...prev, sku: newSKU }
@@ -550,6 +555,7 @@ export default function ProductsPage() {
       const newFormData = { ...prev, [name]: checked }
       if (name === "hasVariants" && !checked) {
         newFormData.variants = []
+        newFormData.variantAttributes = [] // Clear variant attributes if variants are disabled
       }
       return newFormData
     })
@@ -567,29 +573,16 @@ export default function ProductsPage() {
   }
 
   // Variant Management Functions
-  const handleAddVariantClick = () => {
-    const newVariant: ProductVariant = {
-      name: "",
-      price: "",
-      originalPrice: "",
-      sku: "",
-      isActive: true,
-      image: "",
-      options: [],
-    }
-    if (formData.trackQuantity) {
-      newVariant.stock = ""
-    }
-    setEditingVariant(newVariant)
-    setVariantImageUploadKey((prev) => prev + 1)
-    setIsVariantDialogOpen(true)
-  }
-
+  // This function is now primarily for editing an existing variant's details
   const handleEditVariantClick = (variant: ProductVariant) => {
     const safeVariant: ProductVariant = {
       _id: variant._id,
       name: safeToString(variant.name),
-      options: variant.options || [safeToString(variant.name)],
+      options:
+        variant.options?.map((opt) => ({
+          attributeName: safeToString(opt.attributeName),
+          value: safeToString(opt.value),
+        })) || [],
       price: safeToString(variant.price),
       originalPrice: variant.originalPrice ? safeToString(variant.originalPrice) : "",
       sku: safeToString(variant.sku),
@@ -600,7 +593,7 @@ export default function ProductsPage() {
       safeVariant.stock = safeToString(variant.stock)
     }
     setEditingVariant(safeVariant)
-    setVariantImageUploadKey((prev) => prev + 1)
+    setVariantImageUploadKey((prev) => prev + 1) // Force re-render ImageUpload
     setIsVariantDialogOpen(true)
   }
 
@@ -645,7 +638,8 @@ export default function ProductsPage() {
 
   const handleSaveVariant = () => {
     if (!editingVariant) return
-    const requiredFields = ["name", "price", "sku"]
+
+    const requiredFields = ["price", "sku"]
     if (formData.trackQuantity) {
       requiredFields.push("stock")
     }
@@ -654,7 +648,6 @@ export default function ProductsPage() {
       const value = editingVariant[field as keyof ProductVariant]
       const stringValue = safeToString(value)
 
-      // Special handling for stock: if trackQuantity is true, stock can be 0, but not empty string
       if (field === "stock" && formData.trackQuantity) {
         const stockNum = safeToNumber(stringValue)
         return stringValue.trim() === "" || isNaN(stockNum) || stockNum < 0
@@ -663,11 +656,7 @@ export default function ProductsPage() {
     })
 
     if (missingFields.length > 0) {
-      showToast(
-        "Validation Error",
-        `${missingFields.join(", ")} ${missingFields.length === 1 ? "is" : "are"} required.`,
-        "error",
-      )
+      showToast("Validation Error", `Variant fields missing: ${missingFields.join(", ")}. Please fill them.`, "error")
       return
     }
 
@@ -688,7 +677,11 @@ export default function ProductsPage() {
           ? editingVariant._id
           : `temp-${Date.now()}-${Math.random()}`,
       name: safeToString(editingVariant.name).trim(),
-      options: [safeToString(editingVariant.name).trim()],
+      options:
+        editingVariant.options?.map((opt) => ({
+          attributeName: safeToString(opt.attributeName).trim(),
+          value: safeToString(opt.value).trim(),
+        })) || [],
       price: safeToString(editingVariant.price),
       originalPrice: editingVariant.originalPrice ? safeToString(editingVariant.originalPrice) : undefined,
       sku: safeToString(editingVariant.sku).trim().toUpperCase(),
@@ -706,6 +699,7 @@ export default function ProductsPage() {
         updatedVariants[existingIndex] = variantToSave
         return { ...prev, variants: updatedVariants }
       } else {
+        // This case should ideally not happen if variants are generated, but kept for robustness
         return { ...prev, variants: [...prev.variants, variantToSave] }
       }
     })
@@ -747,7 +741,6 @@ export default function ProductsPage() {
       }
       if (formData.trackQuantity) {
         const stockValue = safeToNumber(formData.stock)
-        // Corrected: Allow 0 as valid stock, but not empty string or negative
         if (formData.stock.trim() === "" || isNaN(stockValue) || stockValue < 0) {
           errors.push("Stock quantity cannot be empty, negative, or invalid when quantity tracking is enabled")
         }
@@ -756,6 +749,24 @@ export default function ProductsPage() {
         errors.push("At least one product image is required")
       }
     } else {
+      // Validate variant attributes
+      if (formData.variantAttributes.length === 0) {
+        errors.push("At least one variant attribute (e.g., Size, Color) is required when variants are enabled.")
+      } else {
+        const missingAttributeFields = formData.variantAttributes.some(
+          (attr) => !attr.name.trim() || attr.values.length === 0 || attr.values.some((val) => !val.trim()),
+        )
+        if (missingAttributeFields) {
+          errors.push("All variant attributes must have a name and at least one value.")
+        }
+        const duplicateAttributeNames =
+          new Set(formData.variantAttributes.map((attr) => attr.name.toLowerCase())).size !==
+          formData.variantAttributes.length
+        if (duplicateAttributeNames) {
+          errors.push("Variant attribute names must be unique.")
+        }
+      }
+
       if (formData.variants.length === 0) {
         errors.push("At least one variant is required when variants are enabled")
       }
@@ -773,7 +784,6 @@ export default function ProductsPage() {
         if (formData.trackQuantity) {
           const variantStock = safeToString(variant.stock || "")
           const stockValue = safeToNumber(variantStock)
-          // Corrected: Allow 0 as valid stock, but not empty string or negative
           if (variantStock.trim() === "" || isNaN(stockValue) || stockValue < 0) {
             errors.push(`Variant "${variantName}": Valid stock quantity is required when quantity tracking is enabled`)
           }
@@ -798,6 +808,26 @@ export default function ProductsPage() {
             errors.push(`Variant "${variantName}": MRP must be a valid positive number`)
           } else if (originalPriceValue <= priceValue) {
             errors.push(`Variant "${variantName}": MRP must be greater than Selling Price`)
+          }
+        }
+        // Validate variant options structure against defined attributes
+        const definedAttributes = formData.variantAttributes.map((attr) => attr.name.toLowerCase())
+        const variantOptionNames = variant.options.map((opt) => opt.attributeName.toLowerCase())
+
+        if (
+          variant.options.length !== definedAttributes.length ||
+          !definedAttributes.every((attrName) => variantOptionNames.includes(attrName))
+        ) {
+          errors.push(`Variant "${variantName}": Options do not match defined variant attributes.`)
+        } else {
+          const invalidOptionValues = variant.options.some((opt) => {
+            const attributeDef = formData.variantAttributes.find(
+              (attr) => attr.name.toLowerCase() === opt.attributeName.toLowerCase(),
+            )
+            return !attributeDef || !attributeDef.values.includes(opt.value)
+          })
+          if (invalidOptionValues) {
+            errors.push(`Variant "${variantName}": One or more option values are invalid for their attribute.`)
           }
         }
       }
@@ -840,47 +870,65 @@ export default function ProductsPage() {
                 }
                 const isValid = requiredFields.every((field) => {
                   const fieldValue = safeToString(variant[field as keyof ProductVariant])
-                  // Special check for stock: 0 is valid, empty string is not
                   if (field === "stock" && formData.trackQuantity) {
                     const stockNum = safeToNumber(fieldValue)
                     return fieldValue.trim() !== "" && !isNaN(stockNum) && stockNum >= 0
                   }
                   return fieldValue && fieldValue.trim() !== ""
                 })
-                return isValid
+                // Also validate options for variants
+                const hasValidOptions =
+                  variant.options &&
+                  variant.options.length > 0 &&
+                  !variant.options.some((opt) => !opt.attributeName.trim() || !opt.value.trim())
+                return isValid && hasValidOptions
               })
               .map((variant) => {
                 // Convert numeric fields to actual numbers
                 const cleanVariant: any = {
                   name: safeToString(variant.name).trim(),
-                  options: variant.options || [safeToString(variant.name).trim()],
-                  price: Number.parseFloat(safeToString(variant.price)) || 0, // Here, price defaults to 0 if invalid
+                  options:
+                    variant.options?.map((opt) => ({
+                      attributeName: safeToString(opt.attributeName).trim(),
+                      value: safeToString(opt.value).trim(),
+                    })) || [],
+                  price: Number.parseFloat(safeToString(variant.price)) || 0,
                   sku: safeToString(variant.sku).trim().toUpperCase(),
                   isActive: Boolean(variant.isActive),
                   image: safeToString(variant.image),
                 }
                 if (formData.trackQuantity && variant.stock !== undefined) {
-                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0 // Here, stock defaults to 0 if invalid
+                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
                 }
                 if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                   cleanVariant._id = variant._id
                 }
                 const originalPrice = safeToString(variant.originalPrice || "")
                 if (originalPrice.trim() === "") {
-                  cleanVariant.originalPrice = null // Explicitly set to null if empty
+                  cleanVariant.originalPrice = null
                 } else {
                   const originalPriceNum = Number.parseFloat(originalPrice)
                   if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
                     cleanVariant.originalPrice = originalPriceNum
                   } else {
-                    cleanVariant.originalPrice = null // Set to null if invalid number
+                    cleanVariant.originalPrice = null
                   }
                 }
                 return cleanVariant
               })
             submitData.append(key, JSON.stringify(cleanedVariants))
           } else {
-            submitData.append(key, JSON.stringify([])) // Send empty array if no variants
+            submitData.append(key, JSON.stringify([]))
+          }
+        } else if (key === "variantAttributes") {
+          // Handle variantAttributes
+          if (formData.hasVariants) {
+            const cleanedAttributes = formData.variantAttributes.filter(
+              (attr) => attr.name.trim() && attr.values.length > 0 && !attr.values.some((val) => !val.trim()),
+            )
+            submitData.append(key, JSON.stringify(cleanedAttributes))
+          } else {
+            submitData.append(key, JSON.stringify([]))
           }
         } else if (key === "hasVariants" || key === "allowBackorders" || key === "trackQuantity") {
           // Explicitly handle boolean fields
@@ -892,7 +940,7 @@ export default function ProductsPage() {
 
             if (key === "originalPrice") {
               if (stringValue.trim() === "") {
-                submitData.append(key, "null") // Send "null" string if empty
+                submitData.append(key, "null")
               } else if (!isNaN(numValue) && numValue > 0) {
                 submitData.append(key, numValue.toString())
               }
@@ -902,7 +950,7 @@ export default function ProductsPage() {
               }
             } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
               if (stringValue.trim() === "") {
-                submitData.append(key, "null") // Send "null" string if empty
+                submitData.append(key, "null")
               } else if (!isNaN(numValue)) {
                 submitData.append(key, numValue.toString())
               }
@@ -998,7 +1046,11 @@ export default function ProductsPage() {
         ? product.variants.map((variant) => ({
             _id: variant._id,
             name: safeToString(variant.name),
-            options: variant.options || [safeToString(variant.name)],
+            options:
+              variant.options?.map((opt) => ({
+                attributeName: safeToString(opt.attributeName),
+                value: safeToString(opt.value),
+              })) || [],
             price: safeToString(variant.price),
             originalPrice: variant.originalPrice ? safeToString(variant.originalPrice) : undefined,
             stock: variant.stock !== undefined ? safeToString(variant.stock) : undefined,
@@ -1008,6 +1060,11 @@ export default function ProductsPage() {
           }))
         : [],
       trackQuantity: product.trackQuantity !== undefined ? Boolean(product.trackQuantity) : true,
+      variantAttributes:
+        product.variantAttributes?.map((attr) => ({
+          name: safeToString(attr.name),
+          values: attr.values?.map((val) => safeToString(val)) || [],
+        })) || [],
     })
     setImages(product.gallery ? [...product.gallery] : [])
     setTags(product.tags ? [...product.tags] : [])
@@ -1057,6 +1114,7 @@ export default function ProductsPage() {
       hasVariants: false,
       variants: [],
       trackQuantity: true,
+      variantAttributes: [], // Reset variant attributes
     })
     setImages([])
     setTags([])
@@ -1130,6 +1188,107 @@ export default function ProductsPage() {
   const handleImportProducts = () => {
     showToast("Import Feature", "Product import will be available soon.", "info")
   }
+
+  // Functions to manage variant attributes
+  const handleAddVariantAttribute = () => {
+    setFormData((prev) => ({
+      ...prev,
+      variantAttributes: [...prev.variantAttributes, { name: "", values: [] }],
+    }))
+  }
+
+  const handleRemoveVariantAttribute = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      variantAttributes: prev.variantAttributes.filter((_, i) => i !== index),
+    }))
+  }
+
+  const handleVariantAttributeNameChange = (index: number, name: string) => {
+    setFormData((prev) => {
+      const newAttributes = [...prev.variantAttributes]
+      newAttributes[index] = { ...newAttributes[index], name }
+      return { ...prev, variantAttributes: newAttributes }
+    })
+  }
+
+  const handleVariantAttributeValuesChange = (index: number, valuesString: string) => {
+    setFormData((prev) => {
+      const newAttributes = [...prev.variantAttributes]
+      newAttributes[index] = {
+        ...newAttributes[index],
+        values: valuesString
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean),
+      }
+      return { ...prev, variantAttributes: newAttributes }
+    })
+  }
+
+  // Function to generate all possible variant combinations
+  const generateVariantCombinations = useCallback(() => {
+    if (!formData.hasVariants || formData.variantAttributes.length === 0) {
+      showToast("Info", "No variant attributes defined to generate combinations.", "info")
+      setFormData((prev) => ({ ...prev, variants: [] }))
+      return
+    }
+
+    const validAttributes = formData.variantAttributes.filter(
+      (attr) => attr.name.trim() && attr.values.length > 0 && !attr.values.some((val) => !val.trim()),
+    )
+
+    if (validAttributes.length === 0) {
+      showToast("Validation Error", "Please define at least one valid variant attribute with values.", "error")
+      setFormData((prev) => ({ ...prev, variants: [] }))
+      return
+    }
+
+    const newVariants: ProductVariant[] = []
+
+    // Recursive function to generate combinations
+    const generate = (index: number, currentCombination: { attributeName: string; value: string }[]) => {
+      if (index === validAttributes.length) {
+        const variantName = currentCombination.map((opt) => `${opt.attributeName}: ${opt.value}`).join(" / ")
+        const existingVariant = formData.variants.find((v) => {
+          // Check if a variant with the exact same options already exists
+          if (v.options.length !== currentCombination.length) return false
+          return currentCombination.every((comboOpt) =>
+            v.options.some((vOpt) => vOpt.attributeName === comboOpt.attributeName && vOpt.value === comboOpt.value),
+          )
+        })
+
+        if (existingVariant) {
+          // If variant exists, use its data (e.g., _id, price, stock, image)
+          newVariants.push({ ...existingVariant, name: variantName })
+        } else {
+          // Create a new temporary variant
+          newVariants.push({
+            _id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID for new variants
+            name: variantName,
+            options: currentCombination,
+            price: "", // Default empty
+            originalPrice: "",
+            stock: formData.trackQuantity ? "" : undefined, // Default empty if tracking
+            sku: "", // Will be auto-generated on save or manually
+            isActive: true,
+            image: "",
+          })
+        }
+        return
+      }
+
+      const currentAttribute = validAttributes[index]
+      currentAttribute.values.forEach((value) => {
+        generate(index + 1, [...currentCombination, { attributeName: currentAttribute.name, value: value }])
+      })
+    }
+
+    generate(0, [])
+
+    setFormData((prev) => ({ ...prev, variants: newVariants }))
+    showToast("Variants Generated", `Generated ${newVariants.length} variant combinations.`, "success")
+  }, [formData.variantAttributes, formData.variants, formData.trackQuantity]) // Added dependencies
 
   if (loading) {
     return (
@@ -1529,106 +1688,160 @@ export default function ProductsPage() {
                         </Label>
                       </div>
                       {formData.hasVariants && (
-                        <Card className="border border-gray-200 shadow-sm">
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-base font-semibold">Product Variants</CardTitle>
-                            <Button type="button" size="sm" onClick={handleAddVariantClick}>
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add Variant
-                            </Button>
-                          </CardHeader>
-                          <CardContent className="p-0">
-                            {formData.variants.length === 0 ? (
-                              <div className="p-6 text-center text-gray-500 text-sm">
-                                No variants added yet. Click "Add Variant" to create one.
-                              </div>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Variant Name</TableHead>
-                                      <TableHead>Selling Price</TableHead>
-                                      {formData.trackQuantity && <TableHead>Stock</TableHead>}
-                                      <TableHead>SKU</TableHead>
-                                      <TableHead>Image</TableHead>
-                                      <TableHead>Status</TableHead>
-                                      <TableHead className="w-[50px]"></TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {formData.variants.map((variant, index) => (
-                                      <TableRow key={variant._id || index}>
-                                        <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
-                                        <TableCell>
-                                          <div className="flex flex-col">
-                                            <span className="font-semibold">
-                                              {formatCurrency(safeToNumber(variant.price))}
-                                            </span>
-                                            {variant.originalPrice &&
-                                              safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
-                                                <span className="text-xs text-gray-500 line-through">
-                                                  {formatCurrency(safeToNumber(variant.originalPrice))}
-                                                </span>
-                                              )}
-                                          </div>
-                                        </TableCell>
-                                        {formData.trackQuantity && (
-                                          <TableCell>{safeToString(variant.stock || "0")}</TableCell>
-                                        )}
-                                        <TableCell>
-                                          <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                                            {safeToString(variant.sku)}
-                                          </code>
-                                        </TableCell>
-                                        <TableCell>
-                                          {variant.image ? (
-                                            <img
-                                              src={variant.image || "/placeholder.svg"}
-                                              alt={safeToString(variant.name)}
-                                              className="w-10 h-10 object-cover rounded"
-                                            />
-                                          ) : (
-                                            <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
-                                              No Img
-                                            </div>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant={variant.isActive ? "default" : "secondary"}>
-                                            {variant.isActive ? "Active" : "Inactive"}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                <MoreHorizontal className="h-4 w-4" />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                              <DropdownMenuItem onClick={() => handleEditVariantClick(variant)}>
-                                                <Edit className="h-4 w-4 mr-2" />
-                                                Edit
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem
-                                                onClick={() => handleDeleteVariant(variant)}
-                                                className="text-red-600 focus:text-red-600"
-                                              >
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                Delete
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        </TableCell>
+                        <>
+                          {/* Variant Attributes Section */}
+                          <Card className="border border-gray-200 shadow-sm mb-4">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <CardTitle className="text-base font-semibold">Variant Attributes</CardTitle>
+                              <Button type="button" size="sm" onClick={handleAddVariantAttribute}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Attribute
+                              </Button>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                              {formData.variantAttributes.length === 0 ? (
+                                <div className="text-center text-gray-500 text-sm">
+                                  Define attributes like "Size" or "Color" for your product variants.
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {formData.variantAttributes.map((attribute, index) => (
+                                    <div key={index} className="flex items-end gap-2">
+                                      <div className="flex-1 space-y-2">
+                                        <Label htmlFor={`attribute-name-${index}`}>Attribute Name</Label>
+                                        <Input
+                                          id={`attribute-name-${index}`}
+                                          value={attribute.name}
+                                          onChange={(e) => handleVariantAttributeNameChange(index, e.target.value)}
+                                          placeholder="e.g., Size, Color"
+                                        />
+                                      </div>
+                                      <div className="flex-1 space-y-2">
+                                        <Label htmlFor={`attribute-values-${index}`}>Values (comma-separated)</Label>
+                                        <Input
+                                          id={`attribute-values-${index}`}
+                                          value={attribute.values.join(", ")}
+                                          onChange={(e) => handleVariantAttributeValuesChange(index, e.target.value)}
+                                          placeholder="e.g., S, M, L or Red, Blue"
+                                        />
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="icon"
+                                        onClick={() => handleRemoveVariantAttribute(index)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+
+                          {/* Product Variants Table */}
+                          <Card className="border border-gray-200 shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <CardTitle className="text-base font-semibold">Product Variants</CardTitle>
+                              <Button type="button" size="sm" onClick={generateVariantCombinations}>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Generate Variants
+                              </Button>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                              {formData.variants.length === 0 ? (
+                                <div className="p-6 text-center text-gray-500 text-sm">
+                                  Define variant attributes above and click "Generate Variants" to create combinations.
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Variant Name</TableHead>
+                                        <TableHead>Selling Price</TableHead>
+                                        {formData.trackQuantity && <TableHead>Stock</TableHead>}
+                                        <TableHead>SKU</TableHead>
+                                        <TableHead>Image</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
                                       </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {formData.variants.map((variant, index) => (
+                                        <TableRow key={variant._id || index}>
+                                          <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
+                                          <TableCell>
+                                            <div className="flex flex-col">
+                                              <span className="font-semibold">
+                                                {formatCurrency(safeToNumber(variant.price))}
+                                              </span>
+                                              {variant.originalPrice &&
+                                                safeToNumber(variant.originalPrice) > safeToNumber(variant.price) && (
+                                                  <span className="text-xs text-gray-500 line-through">
+                                                    {formatCurrency(safeToNumber(variant.originalPrice))}
+                                                  </span>
+                                                )}
+                                            </div>
+                                          </TableCell>
+                                          {formData.trackQuantity && (
+                                            <TableCell>{safeToString(variant.stock || "0")}</TableCell>
+                                          )}
+                                          <TableCell>
+                                            <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                                              {safeToString(variant.sku)}
+                                            </code>
+                                          </TableCell>
+                                          <TableCell>
+                                            {variant.image ? (
+                                              <img
+                                                src={variant.image || "/placeholder.svg"}
+                                                alt={safeToString(variant.name)}
+                                                className="w-10 h-10 object-cover rounded"
+                                              />
+                                            ) : (
+                                              <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                No Img
+                                              </div>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant={variant.isActive ? "default" : "secondary"}>
+                                              {variant.isActive ? "Active" : "Inactive"}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                  <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEditVariantClick(variant)}>
+                                                  <Edit className="h-4 w-4 mr-2" />
+                                                  Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleDeleteVariant(variant)}
+                                                  className="text-red-600 focus:text-red-600"
+                                                >
+                                                  <Trash2 className="h-4 w-4 mr-2" />
+                                                  Delete
+                                                </DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </>
                       )}
                     </TabsContent>
                     {/* SEO Tab */}
@@ -1700,15 +1913,32 @@ export default function ProductsPage() {
                 {editingVariant && (
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <Label htmlFor="variantName">Variant Name (e.g., Red / Large) *</Label>
+                      <Label htmlFor="variantName">Variant Name</Label>
                       <Input
                         id="variantName"
                         name="name"
                         value={safeToString(editingVariant.name)}
-                        onChange={handleVariantFormChange}
-                        placeholder="e.g., Red / Large"
-                        required
+                        readOnly // Make read-only as it's derived
+                        className="bg-gray-100 cursor-not-allowed"
                       />
+                      <p className="text-xs text-gray-500">
+                        This name is automatically generated from variant options.
+                      </p>
+                    </div>
+                    {/* Display Variant Options (Read-only) */}
+                    <div className="space-y-2">
+                      <Label>Variant Options</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {editingVariant.options.length > 0 ? (
+                          editingVariant.options.map((option, idx) => (
+                            <Badge key={idx} variant="outline" className="text-sm">
+                              {option.attributeName}: {option.value}
+                            </Badge>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">No options defined for this variant.</p>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -1939,6 +2169,26 @@ export default function ProductsPage() {
                     </div>
                   )}
                 </div>
+                {/* Variant Attributes Display */}
+                {viewingProduct.hasVariants && viewingProduct.variantAttributes.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Variant Attributes</h3>
+                    <div className="space-y-2">
+                      {viewingProduct.variantAttributes.map((attr, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="font-medium">{attr.name}:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {attr.values.map((val, valIdx) => (
+                              <Badge key={valIdx} variant="outline">
+                                {val}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Variants Display */}
                 {viewingProduct.hasVariants && viewingProduct.variants.length > 0 && (
                   <div>
@@ -1948,6 +2198,7 @@ export default function ProductsPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Name</TableHead>
+                            <TableHead>Options</TableHead>
                             <TableHead>Selling Price</TableHead>
                             {viewingProduct.trackQuantity && <TableHead>Stock</TableHead>}
                             <TableHead>SKU</TableHead>
@@ -1959,6 +2210,15 @@ export default function ProductsPage() {
                           {viewingProduct.variants.map((variant, index) => (
                             <TableRow key={variant._id || index}>
                               <TableCell className="font-medium">{safeToString(variant.name)}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {variant.options?.map((opt, optIdx) => (
+                                    <Badge key={optIdx} variant="secondary" className="text-xs">
+                                      {opt.attributeName}: {opt.value}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </TableCell>
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="font-semibold">{formatCurrency(safeToNumber(variant.price))}</span>
