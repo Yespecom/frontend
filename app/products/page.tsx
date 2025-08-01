@@ -882,16 +882,18 @@ export default function ProductsPage() {
           } else {
             submitData.append(key, JSON.stringify([])) // Send empty array if no variants
           }
-        } else if (typeof value === "boolean") {
+        } else if (key === "hasVariants" || key === "allowBackorders" || key === "trackQuantity") {
+          // Explicitly handle boolean fields
           submitData.append(key, value.toString())
         } else if (value !== null && value !== undefined) {
-          // Check for null/undefined, but allow empty string for specific cases
           const stringValue = safeToString(value)
           if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
             const numValue = Number.parseFloat(stringValue)
 
             if (key === "originalPrice") {
-              if (!isNaN(numValue) && numValue > 0) {
+              if (stringValue.trim() === "") {
+                submitData.append(key, "null") // Send "null" string if empty
+              } else if (!isNaN(numValue) && numValue > 0) {
                 submitData.append(key, numValue.toString())
               }
             } else if (key === "stock") {
@@ -899,9 +901,8 @@ export default function ProductsPage() {
                 submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
               }
             } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
-              // These are optional numeric fields. Send "null" string if empty, otherwise the number.
               if (stringValue.trim() === "") {
-                submitData.append(key, "null")
+                submitData.append(key, "null") // Send "null" string if empty
               } else if (!isNaN(numValue)) {
                 submitData.append(key, numValue.toString())
               }
