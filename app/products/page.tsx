@@ -262,7 +262,8 @@ export default function ProductsPage() {
       status: response.status,
       statusText: response.statusText,
       url: response.url,
-      data,
+      // Stringify data for better console readability if it's an object
+      data: typeof data === "object" && data !== null ? JSON.stringify(data, null, 2) : data,
       headers: Object.fromEntries(response.headers.entries()),
     })
     let errorMessage = "Something went wrong. Please try again."
@@ -853,22 +854,26 @@ export default function ProductsPage() {
                 const cleanVariant: any = {
                   name: safeToString(variant.name).trim(),
                   options: variant.options || [safeToString(variant.name).trim()],
-                  price: Number.parseFloat(safeToString(variant.price)) || 0,
+                  price: Number.parseFloat(safeToString(variant.price)) || 0, // Here, price defaults to 0 if invalid
                   sku: safeToString(variant.sku).trim().toUpperCase(),
                   isActive: Boolean(variant.isActive),
                   image: safeToString(variant.image),
                 }
                 if (formData.trackQuantity && variant.stock !== undefined) {
-                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
+                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0 // Here, stock defaults to 0 if invalid
                 }
                 if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                   cleanVariant._id = variant._id
                 }
                 const originalPrice = safeToString(variant.originalPrice || "")
-                if (originalPrice && originalPrice.trim() !== "") {
+                if (originalPrice.trim() === "") {
+                  cleanVariant.originalPrice = null // Explicitly set to null if empty
+                } else {
                   const originalPriceNum = Number.parseFloat(originalPrice)
                   if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
                     cleanVariant.originalPrice = originalPriceNum
+                  } else {
+                    cleanVariant.originalPrice = null // Set to null if invalid number
                   }
                 }
                 return cleanVariant
@@ -879,9 +884,12 @@ export default function ProductsPage() {
           }
         } else if (typeof value === "boolean") {
           submitData.append(key, value.toString())
-        } else if (value !== "" && value !== null && value !== undefined) {
+        } else if (value !== null && value !== undefined) {
+          // Check for null/undefined, but allow empty string for specific cases
+          const stringValue = safeToString(value)
           if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
-            const numValue = Number.parseFloat(safeToString(value))
+            const numValue = Number.parseFloat(stringValue)
+
             if (key === "originalPrice") {
               if (!isNaN(numValue) && numValue > 0) {
                 submitData.append(key, numValue.toString())
@@ -891,15 +899,20 @@ export default function ProductsPage() {
                 submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
               }
             } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
-              submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
+              // These are optional numeric fields. Send "null" string if empty, otherwise the number.
+              if (stringValue.trim() === "") {
+                submitData.append(key, "null")
+              } else if (!isNaN(numValue)) {
+                submitData.append(key, numValue.toString())
+              }
             } else {
-              // price
+              // price (required, validated to be > 0)
               if (!isNaN(numValue)) {
                 submitData.append(key, numValue.toString())
               }
             }
           } else {
-            submitData.append(key, safeToString(value))
+            submitData.append(key, stringValue)
           }
         }
       })
