@@ -935,41 +935,25 @@ export default function ProductsPage() {
           submitData.append(key, value.toString())
         } else if (value !== null && value !== undefined) {
           const stringValue = safeToString(value)
-          if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
+          if (key === "price") {
+            // Always append price. Backend will handle validation and parsing.
+            submitData.append(key, stringValue)
+          } else if (key === "originalPrice") {
+            // Always append originalPrice. Backend will handle validation and parsing.
+            submitData.append(key, stringValue)
+          } else if (key === "stock") {
+            // For main product stock (non-variant, quantity tracked)
+            if (formData.trackQuantity && !formData.hasVariants) {
+              const stockNum = safeToNumber(value)
+              submitData.append(key, stockNum.toString()) // Ensure it's a string
+            }
+            // If not tracking quantity or has variants, stock is not appended for main product.
+          } else if (["taxPercentage", "weight", "lowStockAlert"].includes(key)) {
             const numValue = Number.parseFloat(stringValue)
-
-            if (key === "originalPrice") {
-              // For main product originalPrice (non-variant)
-              if (!formData.hasVariants) {
-                const originalPriceString = safeToString(value).trim()
-                if (originalPriceString !== "") {
-                  const originalPriceNum = Number.parseFloat(originalPriceString)
-                  if (!isNaN(originalPriceNum) && originalPriceNum >= 0) {
-                    submitData.append(key, originalPriceNum.toString())
-                  }
-                }
-                // If originalPriceString is empty or invalid, it's not appended,
-                // allowing Mongoose to treat it as undefined/null.
-              }
-              // If hasVariants is true, originalPrice for main product is not relevant and should not be sent.
-            } else if (key === "stock") {
-              // For main product stock (non-variant, quantity tracked)
-              if (formData.trackQuantity && !formData.hasVariants) {
-                const stockNum = safeToNumber(value)
-                submitData.append(key, stockNum.toString()) // Ensure it's a string
-              }
-              // If not tracking quantity or has variants, stock is not appended for main product.
-            } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
-              if (stringValue.trim() === "") {
-                submitData.append(key, "null")
-              } else if (!isNaN(numValue)) {
-                submitData.append(key, numValue.toString())
-              }
-            } else {
-              // price (required, validated to be > 0)
-              if (!isNaN(numValue)) {
-                submitData.append(key, numValue.toString())
-              }
+            if (stringValue.trim() === "") {
+              submitData.append(key, "null")
+            } else if (!isNaN(numValue)) {
+              submitData.append(key, numValue.toString())
             }
           } else {
             submitData.append(key, stringValue)
