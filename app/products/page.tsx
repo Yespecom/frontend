@@ -898,21 +898,21 @@ export default function ProductsPage() {
                   image: safeToString(variant.image),
                 }
                 if (formData.trackQuantity && variant.stock !== undefined) {
-                  cleanVariant.stock = Number.parseInt(safeToString(variant.stock)) || 0
+                  // Ensure stock is sent as a string to match Mongoose schema's type: String
+                  cleanVariant.stock = safeToString(variant.stock)
+                } else if (!formData.trackQuantity) {
+                  // If quantity is not tracked, ensure stock is not sent for variants
+                  delete cleanVariant.stock
                 }
                 if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                   cleanVariant._id = variant._id
                 }
                 const originalPrice = safeToString(variant.originalPrice || "")
                 if (originalPrice.trim() === "") {
-                  cleanVariant.originalPrice = null
+                  cleanVariant.originalPrice = undefined // Send undefined to omit from payload if empty
                 } else {
-                  const originalPriceNum = Number.parseFloat(originalPrice)
-                  if (!isNaN(originalPriceNum) && originalPriceNum > 0) {
-                    cleanVariant.originalPrice = originalPriceNum
-                  } else {
-                    cleanVariant.originalPrice = null
-                  }
+                  // Ensure originalPrice is sent as a string to match Mongoose schema's type: String
+                  cleanVariant.originalPrice = originalPrice
                 }
                 return cleanVariant
               })
@@ -2450,25 +2450,6 @@ export default function ProductsPage() {
                               </div>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {product.trackQuantity ? (
-                            <div className="flex flex-col space-y-1">
-                              <span className="font-medium text-slate-800">{product.stock || 0} units</span>
-                              <span
-                                className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium w-fit ${getStockStatusColor(product)}`}
-                              >
-                                {getStockStatusText(product)}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col space-y-1">
-                              <span className="text-gray-500 text-sm">Not tracked</span>
-                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium w-fit bg-blue-50 text-blue-700 border border-blue-200">
-                                Not Tracked
-                              </span>
-                            </div>
-                          )}
                         </TableCell>
                         <TableCell>
                           {product.offer ? (
