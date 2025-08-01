@@ -247,9 +247,11 @@ export default function ProductsPage() {
     const id = Math.random().toString(36).substr(2, 9)
     setToasts((prev) => [...prev, { ...toast, id }])
   }
+
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }
+
   const showToast = (title: string, description?: string, type: Toast["type"] = "info") => {
     addToast({ title, description, type })
   }
@@ -263,7 +265,6 @@ export default function ProductsPage() {
       data,
       headers: Object.fromEntries(response.headers.entries()),
     })
-
     let errorMessage = "Something went wrong. Please try again."
     if (data?.error) {
       errorMessage = data.error
@@ -338,6 +339,7 @@ export default function ProductsPage() {
     const defaultHeaders: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     }
+
     // Only set Content-Type to application/json if body is not FormData
     if (!(options.body instanceof FormData)) {
       defaultHeaders["Content-Type"] = "application/json"
@@ -642,7 +644,6 @@ export default function ProductsPage() {
 
   const handleSaveVariant = () => {
     if (!editingVariant) return
-
     const requiredFields = ["name", "price", "sku"]
     if (formData.trackQuantity) {
       requiredFields.push("stock")
@@ -651,6 +652,12 @@ export default function ProductsPage() {
     const missingFields = requiredFields.filter((field) => {
       const value = editingVariant[field as keyof ProductVariant]
       const stringValue = safeToString(value)
+
+      // Special handling for stock: if trackQuantity is true, stock can be 0, but not empty string
+      if (field === "stock" && formData.trackQuantity) {
+        const stockNum = safeToNumber(stringValue)
+        return stringValue.trim() === "" || isNaN(stockNum) || stockNum < 0
+      }
       return !stringValue || stringValue.trim() === ""
     })
 
@@ -687,7 +694,6 @@ export default function ProductsPage() {
       isActive: Boolean(editingVariant.isActive),
       image: safeToString(editingVariant.image),
     }
-
     if (formData.trackQuantity && editingVariant.stock !== undefined) {
       variantToSave.stock = safeToString(editingVariant.stock)
     }
@@ -709,7 +715,6 @@ export default function ProductsPage() {
 
   const validateForm = () => {
     const errors: string[] = []
-
     if (!formData.name.trim()) {
       errors.push("Product name is required")
     }
@@ -741,8 +746,9 @@ export default function ProductsPage() {
       }
       if (formData.trackQuantity) {
         const stockValue = safeToNumber(formData.stock)
-        if (formData.stock === "" || stockValue < 0) {
-          errors.push("Stock quantity cannot be negative when quantity tracking is enabled")
+        // Corrected: Allow 0 as valid stock, but not empty string or negative
+        if (formData.stock.trim() === "" || isNaN(stockValue) || stockValue < 0) {
+          errors.push("Stock quantity cannot be empty, negative, or invalid when quantity tracking is enabled")
         }
       }
       if (!editingProduct && images.length === 0) {
@@ -766,7 +772,8 @@ export default function ProductsPage() {
         if (formData.trackQuantity) {
           const variantStock = safeToString(variant.stock || "")
           const stockValue = safeToNumber(variantStock)
-          if (!variantStock || variantStock.trim() === "" || isNaN(stockValue) || stockValue < 0) {
+          // Corrected: Allow 0 as valid stock, but not empty string or negative
+          if (variantStock.trim() === "" || isNaN(stockValue) || stockValue < 0) {
             errors.push(`Variant "${variantName}": Valid stock quantity is required when quantity tracking is enabled`)
           }
         }
@@ -832,6 +839,11 @@ export default function ProductsPage() {
                 }
                 const isValid = requiredFields.every((field) => {
                   const fieldValue = safeToString(variant[field as keyof ProductVariant])
+                  // Special check for stock: 0 is valid, empty string is not
+                  if (field === "stock" && formData.trackQuantity) {
+                    const stockNum = safeToNumber(fieldValue)
+                    return fieldValue.trim() !== "" && !isNaN(stockNum) && stockNum >= 0
+                  }
                   return fieldValue && fieldValue.trim() !== ""
                 })
                 return isValid
@@ -870,8 +882,21 @@ export default function ProductsPage() {
         } else if (value !== "" && value !== null && value !== undefined) {
           if (["price", "originalPrice", "taxPercentage", "stock", "lowStockAlert", "weight"].includes(key)) {
             const numValue = Number.parseFloat(safeToString(value))
-            if (!isNaN(numValue)) {
-              submitData.append(key, numValue.toString())
+            if (key === "originalPrice") {
+              if (!isNaN(numValue) && numValue > 0) {
+                submitData.append(key, numValue.toString())
+              }
+            } else if (key === "stock") {
+              if (formData.trackQuantity && !formData.hasVariants) {
+                submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
+              }
+            } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
+              submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
+            } else {
+              // price
+              if (!isNaN(numValue)) {
+                submitData.append(key, numValue.toString())
+              }
             }
           } else {
             submitData.append(key, safeToString(value))
@@ -881,7 +906,6 @@ export default function ProductsPage() {
 
       submitData.append("tags", JSON.stringify(tags))
       submitData.append("gallery", JSON.stringify(images)) // Send main product images as a JSON array
-
       if (formData.offer && formData.offer !== "none") {
         submitData.append("offer", formData.offer)
       }
@@ -1040,6 +1064,7 @@ export default function ProductsPage() {
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
+
     if (stock === 0 && !allowBackorders) {
       return "bg-red-50 text-red-700 border border-red-200"
     } else if (stock <= lowStockAlert && stock > 0) {
@@ -1057,6 +1082,7 @@ export default function ProductsPage() {
     const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
+
     if (stock === 0 && !allowBackorders) {
       return "Out of Stock"
     } else if (stock <= lowStockAlert && stock > 0) {
