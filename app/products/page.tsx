@@ -939,15 +939,26 @@ export default function ProductsPage() {
             const numValue = Number.parseFloat(stringValue)
 
             if (key === "originalPrice") {
-              if (stringValue.trim() === "") {
-                submitData.append(key, "null")
-              } else if (!isNaN(numValue) && numValue > 0) {
-                submitData.append(key, numValue.toString())
+              // For main product originalPrice (non-variant)
+              if (!formData.hasVariants) {
+                const originalPriceString = safeToString(value).trim()
+                if (originalPriceString !== "") {
+                  const originalPriceNum = Number.parseFloat(originalPriceString)
+                  if (!isNaN(originalPriceNum) && originalPriceNum >= 0) {
+                    submitData.append(key, originalPriceNum.toString())
+                  }
+                }
+                // If originalPriceString is empty or invalid, it's not appended,
+                // allowing Mongoose to treat it as undefined/null.
               }
+              // If hasVariants is true, originalPrice for main product is not relevant and should not be sent.
             } else if (key === "stock") {
+              // For main product stock (non-variant, quantity tracked)
               if (formData.trackQuantity && !formData.hasVariants) {
-                submitData.append(key, (isNaN(numValue) ? 0 : numValue).toString())
+                const stockNum = safeToNumber(value)
+                submitData.append(key, stockNum.toString()) // Ensure it's a string
               }
+              // If not tracking quantity or has variants, stock is not appended for main product.
             } else if (key === "taxPercentage" || key === "weight" || key === "lowStockAlert") {
               if (stringValue.trim() === "") {
                 submitData.append(key, "null")
