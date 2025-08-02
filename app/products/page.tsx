@@ -2450,17 +2450,21 @@ export default function ProductsPage() {
                       <TableRow key={product._id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            {product.thumbnail ? (
-                              <img
-                                src={product.thumbnail || "/placeholder.svg"}
-                                alt={product.name}
-                                className="w-12 h-12 rounded-lg object-cover border border-gray-200"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
-                                <Package className="h-6 w-6 text-gray-400" />
-                              </div>
-                            )}
+                            {(() => {
+                              const displayImage =
+                                product.thumbnail ||
+                                (product.hasVariants && product.variants.length > 0
+                                  ? product.variants.find((v) => v.image)?.image
+                                  : null) ||
+                                "/placeholder.svg"
+                              return (
+                                <img
+                                  src={displayImage || "/placeholder.svg"}
+                                  alt={product.name}
+                                  className="w-12 h-12 rounded-lg object-cover border border-gray-200"
+                                />
+                              )
+                            })()}
                             <div className="min-w-0">
                               <p className="font-medium text-slate-800 truncate">{product.name}</p>
                               <p className="text-sm text-gray-500 truncate max-w-[200px]">{product.shortDescription}</p>
