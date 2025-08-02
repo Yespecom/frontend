@@ -231,6 +231,7 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
           <p className="text-gray-600 text-sm">Manage customer orders and fulfillment</p>
         </div>
+
         {/* Orders Table */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="border-b border-gray-200 bg-white">
