@@ -18,7 +18,7 @@ import { ShoppingCart, Eye, Package, User, MapPin, CreditCard, Printer } from "l
 import { useToast } from "@/hooks/use-toast"
 import InvoiceDocument from "@/components/invoice-document"
 import LabelDocument from "@/components/label-document"
-import { printDocument } from "@/lib/print-utils"
+import { printDocument } from "@/lib/print-utils" // Updated import path
 
 interface Order {
   _id: string
