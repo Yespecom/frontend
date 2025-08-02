@@ -949,9 +949,14 @@ export default function ProductsPage() {
         } else if (key === "variantAttributes") {
           // Handle variantAttributes
           if (formData.hasVariants) {
-            const cleanedAttributes = formData.variantAttributes.filter(
-              (attr) => attr.name.trim() && attr.values.length > 0 && !attr.values.some((val) => !val.trim()),
-            )
+            const cleanedAttributes = formData.variantAttributes
+              .map((attr) => ({
+                ...attr,
+                values: attr.values.map((val) => val.trim()), // Trim and filter empty values here
+              }))
+              .filter(
+                (attr) => attr.name.trim() && attr.values.length > 0, // Ensure name exists and at least one value remains
+              )
             submitData.append(key, JSON.stringify(cleanedAttributes))
           } else {
             submitData.append(key, JSON.stringify([]))
@@ -1263,10 +1268,7 @@ export default function ProductsPage() {
       const newAttributes = [...prev.variantAttributes]
       newAttributes[index] = {
         ...newAttributes[index],
-        values: valuesString
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
+        values: valuesString.split(",").map((v) => v.trim()),
       }
       return { ...prev, variantAttributes: newAttributes }
     })
