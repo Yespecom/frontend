@@ -1,4 +1,5 @@
 "use client"
+
 import { DialogTrigger } from "@/components/ui/dialog"
 import type React from "react"
 import { useState, useEffect, useCallback } from "react" // Added useCallback
@@ -249,11 +250,9 @@ export default function ProductsPage() {
     const id = Math.random().toString(36).substr(2, 9)
     setToasts((prev) => [...prev, { ...toast, id }])
   }
-
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }
-
   const showToast = (title: string, description?: string, type: Toast["type"] = "info") => {
     addToast({ title, description, type })
   }
@@ -412,6 +411,7 @@ export default function ProductsPage() {
   // Auto-generate variant SKU
   const generateVariantSKU = () => {
     if (!editingVariant) return
+
     const baseSKU = formData.sku || "PRD"
     // Generate variant SKU from options if available, otherwise from name
     const variantOptionString =
@@ -422,6 +422,7 @@ export default function ProductsPage() {
       .slice(0, 6)
     const timestamp = Date.now().toString().slice(-4)
     const newSKU = `${baseSKU}-${variantNamePart}${timestamp}`
+
     setEditingVariant((prev) => {
       if (!prev) return null
       return { ...prev, sku: newSKU }
@@ -516,7 +517,7 @@ export default function ProductsPage() {
     setFilteredProducts(filtered)
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | React.ChangeEvent<HTMLTextAreaElement>>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     if (name.startsWith("dimensions.")) {
       const dimensionKey = name.split(".")[1]
@@ -556,6 +557,15 @@ export default function ProductsPage() {
       if (name === "hasVariants" && !checked) {
         newFormData.variants = []
         newFormData.variantAttributes = [] // Clear variant attributes if variants are disabled
+        // If switching from variant to non-variant, reset main product price/stock
+        newFormData.price = ""
+        newFormData.originalPrice = ""
+        newFormData.stock = ""
+      } else if (name === "hasVariants" && checked) {
+        // If switching to variant, clear main product price/stock
+        newFormData.price = ""
+        newFormData.originalPrice = ""
+        newFormData.stock = ""
       }
       return newFormData
     })
@@ -647,7 +657,6 @@ export default function ProductsPage() {
     const missingFields = requiredFields.filter((field) => {
       const value = editingVariant[field as keyof ProductVariant]
       const stringValue = safeToString(value)
-
       if (field === "stock" && formData.trackQuantity) {
         const stockNum = safeToNumber(stringValue)
         return stringValue.trim() === "" || isNaN(stockNum) || stockNum < 0
@@ -675,7 +684,7 @@ export default function ProductsPage() {
       _id:
         editingVariant._id && !editingVariant._id.startsWith("temp-")
           ? editingVariant._id
-          : `temp-${Date.now()}-${Math.random()}`,
+          : `temp-${Date.now()}-${Math.random()}`, // Assign temp ID if new
       name: safeToString(editingVariant.name).trim(),
       options:
         editingVariant.options?.map((opt) => ({
@@ -688,6 +697,7 @@ export default function ProductsPage() {
       isActive: Boolean(editingVariant.isActive),
       image: safeToString(editingVariant.image),
     }
+
     if (formData.trackQuantity && editingVariant.stock !== undefined) {
       variantToSave.stock = safeToString(editingVariant.stock)
     }
@@ -703,6 +713,7 @@ export default function ProductsPage() {
         return { ...prev, variants: [...prev.variants, variantToSave] }
       }
     })
+
     showToast("Variant Saved", `Variant '${safeToString(editingVariant.name)}' has been saved.`, "success")
     setIsVariantDialogOpen(false)
     setEditingVariant(null)
@@ -710,6 +721,7 @@ export default function ProductsPage() {
 
   const validateForm = () => {
     const errors: string[] = []
+
     if (!formData.name.trim()) {
       errors.push("Product name is required")
     }
@@ -770,17 +782,21 @@ export default function ProductsPage() {
       if (formData.variants.length === 0) {
         errors.push("At least one variant is required when variants are enabled")
       }
+
       for (let i = 0; i < formData.variants.length; i++) {
         const variant = formData.variants[i]
         const variantName = safeToString(variant.name)
+
         if (!variantName || variantName.trim() === "") {
           errors.push(`Variant ${i + 1}: Name is required`)
         }
+
         const variantPrice = safeToString(variant.price)
         const priceValue = safeToNumber(variantPrice)
         if (!variantPrice || variantPrice.trim() === "" || isNaN(priceValue) || priceValue <= 0) {
           errors.push(`Variant "${variantName}": Valid Selling Price is required`)
         }
+
         if (formData.trackQuantity) {
           const variantStock = safeToString(variant.stock || "")
           const stockValue = safeToNumber(variantStock)
@@ -788,10 +804,12 @@ export default function ProductsPage() {
             errors.push(`Variant "${variantName}": Valid stock quantity is required when quantity tracking is enabled`)
           }
         }
+
         const variantSku = safeToString(variant.sku)
         if (!variantSku || variantSku.trim() === "") {
           errors.push(`Variant "${variantName}": SKU is required`)
         }
+
         const currentSku = variantSku.trim().toUpperCase()
         const duplicateSku = formData.variants.find((v, index) => {
           if (index === i) return false
@@ -801,6 +819,7 @@ export default function ProductsPage() {
         if (duplicateSku) {
           errors.push(`Duplicate SKU "${variantSku}" found in variants`)
         }
+
         const variantOriginalPrice = safeToString(variant.originalPrice || "")
         if (variantOriginalPrice && variantOriginalPrice.trim() !== "") {
           const originalPriceValue = safeToNumber(variantOriginalPrice)
@@ -810,6 +829,7 @@ export default function ProductsPage() {
             errors.push(`Variant "${variantName}": MRP must be greater than Selling Price`)
           }
         }
+
         // Validate variant options structure against defined attributes
         const definedAttributes = formData.variantAttributes.map((attr) => attr.name.toLowerCase())
         const variantOptionNames = variant.options.map((opt) => opt.attributeName.toLowerCase())
@@ -831,6 +851,7 @@ export default function ProductsPage() {
           }
         }
       }
+
       const hasMainImages = images.length > 0
       const hasVariantImages = formData.variants.some((variant) => {
         const variantImage = safeToString(variant.image)
@@ -840,6 +861,7 @@ export default function ProductsPage() {
         errors.push("At least one image is required (either main product images or variant images)")
       }
     }
+
     return errors
   }
 
@@ -876,6 +898,7 @@ export default function ProductsPage() {
                   }
                   return fieldValue && fieldValue.trim() !== ""
                 })
+
                 // Also validate options for variants
                 const hasValidOptions =
                   variant.options &&
@@ -897,6 +920,7 @@ export default function ProductsPage() {
                   isActive: Boolean(variant.isActive),
                   image: safeToString(variant.image),
                 }
+
                 if (formData.trackQuantity && variant.stock !== undefined) {
                   // Ensure stock is sent as a string to match Mongoose schema's type: String
                   cleanVariant.stock = safeToString(variant.stock)
@@ -904,9 +928,11 @@ export default function ProductsPage() {
                   // If quantity is not tracked, ensure stock is not sent for variants
                   delete cleanVariant.stock
                 }
+
                 if (variant._id && !variant._id.startsWith("temp-") && variant._id.match(/^[0-9a-fA-F]{24}$/)) {
                   cleanVariant._id = variant._id
                 }
+
                 const originalPrice = safeToString(variant.originalPrice || "")
                 if (originalPrice.trim() === "") {
                   cleanVariant.originalPrice = undefined // Send undefined to omit from payload if empty
@@ -962,7 +988,8 @@ export default function ProductsPage() {
       })
 
       submitData.append("tags", JSON.stringify(tags))
-      submitData.append("gallery", JSON.stringify(images)) // Send main product images as a JSON array
+      submitData.append("existingImages", JSON.stringify(images)) // Send main product images as a JSON array
+
       if (formData.offer && formData.offer !== "none") {
         submitData.append("offer", formData.offer)
       }
@@ -1020,7 +1047,8 @@ export default function ProductsPage() {
       sku: safeToString(product.sku),
       shortDescription: safeToString(product.shortDescription),
       description: safeToString(product.description),
-      price: product.hasVariants ? "" : safeToString(product.price), // Clear if variants
+      // Clear price/stock if it's a variant product, as they are managed by variants
+      price: product.hasVariants ? "" : safeToString(product.price),
       // FIX: If originalPrice is 0, treat it as empty string to avoid validation issues
       originalPrice:
         !product.hasVariants && product.originalPrice === 0 ? "" : safeToString(product.originalPrice || ""),
@@ -1134,12 +1162,27 @@ export default function ProductsPage() {
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
 
-    if (stock === 0 && !allowBackorders) {
-      return "bg-red-50 text-red-700 border border-red-200"
-    } else if (stock <= lowStockAlert && stock > 0) {
-      return "bg-amber-50 text-amber-700 border border-amber-200"
-    } else if (stock > 0) {
-      return "bg-green-50 text-green-700 border border-green-200"
+    if (product.hasVariants) {
+      const totalVariantStock = product.variants.reduce((sum, v) => sum + safeToNumber(v.stock), 0)
+      if (totalVariantStock === 0 && !allowBackorders) {
+        return "bg-red-50 text-red-700 border border-red-200"
+      } else if (totalVariantStock <= lowStockAlert && totalVariantStock > 0) {
+        return "bg-amber-50 text-amber-700 border border-amber-200"
+      } else if (totalVariantStock > 0) {
+        return "bg-green-50 text-green-700 border border-green-200"
+      } else if (totalVariantStock === 0 && allowBackorders) {
+        return "bg-orange-50 text-orange-700 border border-orange-200"
+      }
+    } else {
+      if (stock === 0 && !allowBackorders) {
+        return "bg-red-50 text-red-700 border border-red-200"
+      } else if (stock <= lowStockAlert && stock > 0) {
+        return "bg-amber-50 text-amber-700 border border-amber-200"
+      } else if (stock > 0) {
+        return "bg-green-50 text-green-700 border border-green-200"
+      } else if (stock === 0 && allowBackorders) {
+        return "bg-orange-50 text-orange-700 border border-orange-200"
+      }
     }
     return "bg-gray-50 text-gray-700 border border-gray-200"
   }
@@ -1148,17 +1191,23 @@ export default function ProductsPage() {
     if (!product.trackQuantity) {
       return "Not Tracked"
     }
-    const stock = product.stock || 0
     const lowStockAlert = product.lowStockAlert || 5
     const allowBackorders = product.allowBackorders || false
 
-    if (stock === 0 && !allowBackorders) {
+    let currentStock = 0
+    if (product.hasVariants) {
+      currentStock = product.variants.reduce((sum, v) => sum + safeToNumber(v.stock), 0)
+    } else {
+      currentStock = product.stock || 0
+    }
+
+    if (currentStock === 0 && !allowBackorders) {
       return "Out of Stock"
-    } else if (stock <= lowStockAlert && stock > 0) {
+    } else if (currentStock <= lowStockAlert && currentStock > 0) {
       return "Low Stock"
-    } else if (stock > 0) {
+    } else if (currentStock > 0) {
       return "In Stock"
-    } else if (stock === 0 && allowBackorders) {
+    } else if (currentStock === 0 && allowBackorders) {
       return "Out of Stock (Backorderable)"
     }
     return "Unknown"
@@ -1246,14 +1295,22 @@ export default function ProductsPage() {
     // Recursive function to generate combinations
     const generate = (index: number, currentCombination: { attributeName: string; value: string }[]) => {
       if (index === validAttributes.length) {
-        const variantName = currentCombination.map((opt) => `${opt.attributeName}: ${opt.value}`).join(" / ")
+        // Create a unique key for the combination to check for existing variants
+        const combinationKey = currentCombination
+          .map((opt) => `${opt.attributeName.toLowerCase()}:${opt.value.toLowerCase()}`)
+          .sort()
+          .join("|")
+
         const existingVariant = formData.variants.find((v) => {
-          // Check if a variant with the exact same options already exists
           if (v.options.length !== currentCombination.length) return false
-          return currentCombination.every((comboOpt) =>
-            v.options.some((vOpt) => vOpt.attributeName === comboOpt.attributeName && vOpt.value === comboOpt.value),
-          )
+          const variantOptionsKey = v.options
+            .map((opt) => `${opt.attributeName.toLowerCase()}:${opt.value.toLowerCase()}`)
+            .sort()
+            .join("|")
+          return variantOptionsKey === combinationKey
         })
+
+        const variantName = currentCombination.map((opt) => `${opt.attributeName}: ${opt.value}`).join(" / ")
 
         if (existingVariant) {
           // If variant exists, use its data (e.g., _id, price, stock, image)
@@ -1282,7 +1339,6 @@ export default function ProductsPage() {
     }
 
     generate(0, [])
-
     setFormData((prev) => ({ ...prev, variants: newVariants }))
     showToast("Variants Generated", `Generated ${newVariants.length} variant combinations.`, "success")
   }, [formData.variantAttributes, formData.variants, formData.trackQuantity]) // Added dependencies
@@ -1736,7 +1792,6 @@ export default function ProductsPage() {
                               )}
                             </CardContent>
                           </Card>
-
                           {/* Product Variants Table */}
                           <Card className="border border-gray-200 shadow-sm">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -2434,7 +2489,11 @@ export default function ProductsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-slate-800">{formatCurrency(product.price)}</span>
+                            <span className="font-semibold text-slate-800">
+                              {product.hasVariants
+                                ? formatCurrency(product.lowestVariantPrice || 0)
+                                : formatCurrency(product.price)}
+                            </span>
                             {product.originalPrice && product.originalPrice > product.price && (
                               <div className="flex items-center space-x-2">
                                 <span className="text-xs text-gray-500 line-through">
@@ -2447,6 +2506,16 @@ export default function ProductsPage() {
                               </div>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStockStatusColor(product)}>
+                            {getStockStatusText(product)}
+                            {product.trackQuantity && !product.hasVariants && product.stock !== undefined
+                              ? ` (${product.stock})`
+                              : product.trackQuantity && product.hasVariants
+                                ? ` (${product.variants.reduce((sum, v) => sum + safeToNumber(v.stock), 0)})`
+                                : ""}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {product.offer ? (
