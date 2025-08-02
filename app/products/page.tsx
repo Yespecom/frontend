@@ -2113,14 +2113,31 @@ export default function ProductsPage() {
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Product Images</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {viewingProduct.gallery?.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image || "/placeholder.svg"}
-                          alt={`${viewingProduct.name} ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border"
-                        />
-                      ))}
+                      {viewingProduct.gallery && viewingProduct.gallery.length > 0 ? (
+                        viewingProduct.gallery.map((image, index) => (
+                          <img
+                            key={index}
+                            src={image || "/placeholder.svg"}
+                            alt={`${viewingProduct.name} ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border"
+                          />
+                        ))
+                      ) : viewingProduct.hasVariants && viewingProduct.variants.length > 0 ? (
+                        viewingProduct.variants
+                          .filter((v) => v.image)
+                          .map((variant, index) => (
+                            <img
+                              key={variant._id || index}
+                              src={variant.image || "/placeholder.svg"}
+                              alt={`${viewingProduct.name} - ${variant.name}`}
+                              className="w-full h-32 object-cover rounded-lg border"
+                            />
+                          ))
+                      ) : (
+                        <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm border">
+                          No Images
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Basic Info */}
