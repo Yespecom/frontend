@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import AdminLayout from "@/components/admin-layout"
 import { Button } from "@/components/ui/button"
@@ -18,7 +17,8 @@ import { ShoppingCart, Eye, Package, User, MapPin, CreditCard, Printer } from "l
 import { useToast } from "@/hooks/use-toast"
 import InvoiceDocument from "@/components/invoice-document"
 import LabelDocument from "@/components/label-document"
-import { printDocument } from "@/lib/print-utils" // Updated import path
+import { printDocument } from "@/lib/print-utils.tsx" // Corrected import path
+import { formatCurrency, formatDate } from "@/lib/formatters" // New import from shared formatters
 
 interface Order {
   _id: string
@@ -70,24 +70,6 @@ const shopInfo = {
   phone: "+919876543210",
   email: "info@yespstudio.com",
   website: "www.yespstudio.com",
-}
-
-// Re-exporting formatters for use in print components
-export const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(amount)
-}
-
-export const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
 }
 
 export default function OrdersPage() {
@@ -231,7 +213,6 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
           <p className="text-gray-600 text-sm">Manage customer orders and fulfillment</p>
         </div>
-
         {/* Orders Table */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader className="border-b border-gray-200 bg-white">
