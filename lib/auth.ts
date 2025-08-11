@@ -48,3 +48,14 @@ export function verifyCustomerToken(token: string): {
     return null
   }
 }
+
+/**
+ * Generate a store-scoped customer token that includes tenantId and supports custom expiry days.
+ */
+export function generateStoreScopedCustomerToken(
+  payload: { customerId: string; email: string; storeId: string; tenantId: string },
+  expiresInDays: number,
+): string {
+  const expiresIn = `${expiresInDays}d`
+  return jwt.sign(payload, JWT_SECRET, { expiresIn })
+}
