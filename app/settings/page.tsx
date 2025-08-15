@@ -64,19 +64,21 @@ interface PaymentSettings {
   razorpayKeySecret: string
   stripePublicKey: string
   stripeSecretKey: string
-  phonePeMerchantId: string
-  phonePeSaltKey: string
-  phonePeSaltIndex: string
-  phonePeEnvironment: "sandbox" | "production"
-  phonePeWebhookUrl: string
+  paypalClientId: string
+  paypalClientSecret: string
+  phonepe: {
+    merchantId: string
+    appId: string
+    saltKey: string
+    saltIndex: number
+    environment: "sandbox" | "production"
+  }
   codEnabled: boolean
   razorpayEnabled: boolean
   stripeEnabled: boolean
+  paypalEnabled: boolean
   phonePeEnabled: boolean
   onlinePaymentEnabled?: boolean
-  paypalEnabled?: boolean
-  paypalClientId?: string
-  paypalClientSecret?: string
 }
 
 interface ShippingSettings {
@@ -254,19 +256,21 @@ export default function CombinedSettingsPage() {
     razorpayKeySecret: "",
     stripePublicKey: "",
     stripeSecretKey: "",
-    phonePeMerchantId: "",
-    phonePeSaltKey: "",
-    phonePeSaltIndex: "",
-    phonePeEnvironment: "sandbox",
-    phonePeWebhookUrl: "",
+    paypalClientId: "",
+    paypalClientSecret: "",
+    phonepe: {
+      merchantId: "",
+      appId: "",
+      saltKey: "",
+      saltIndex: 1,
+      environment: "sandbox",
+    },
     codEnabled: true,
     razorpayEnabled: false,
     stripeEnabled: false,
+    paypalEnabled: false,
     phonePeEnabled: false,
     onlinePaymentEnabled: false,
-    paypalEnabled: false,
-    paypalClientId: "",
-    paypalClientSecret: "",
   })
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({
     deliveryTime: "",
@@ -321,29 +325,24 @@ export default function CombinedSettingsPage() {
             setSocialSettings((prev) => ({ ...prev, ...data }))
             break
           case "payment":
-            // Handle payment settings with comprehensive mapping
             const paymentData = {
-              // Handle flat structure (direct properties)
               razorpayKeyId: data.razorpayKeyId || "",
               razorpayKeySecret: data.razorpayKeySecret || "",
               razorpayEnabled: data.razorpayEnabled || false,
-
               stripePublicKey: data.stripePublicKey || "",
               stripeSecretKey: data.stripeSecretKey || "",
               stripeEnabled: data.stripeEnabled || false,
-
-              phonePeMerchantId: data.phonePeMerchantId || "",
-              phonePeSaltKey: data.phonePeSaltKey || "",
-              phonePeSaltIndex: data.phonePeSaltIndex || "",
-              phonePeEnvironment: data.phonePeEnvironment || "sandbox",
-              phonePeWebhookUrl: data.phonePeWebhookUrl || "",
-              phonePeEnabled: data.phonePeEnabled || false,
-
-              // Add PayPal handling
-              paypalEnabled: data.paypalEnabled || false,
               paypalClientId: data.paypalClientId || "",
               paypalClientSecret: data.paypalClientSecret || "",
-
+              paypalEnabled: data.paypalEnabled || false,
+              phonepe: {
+                merchantId: data.phonepe?.merchantId || "",
+                appId: data.phonepe?.appId || "",
+                saltKey: data.phonepe?.saltKey || "",
+                saltIndex: data.phonepe?.saltIndex || 1,
+                environment: data.phonepe?.environment || "sandbox",
+              },
+              phonePeEnabled: data.phonepe?.enabled || false,
               codEnabled: data.codEnabled !== undefined ? data.codEnabled : true,
               onlinePaymentEnabled: data.onlinePaymentEnabled !== undefined ? data.onlinePaymentEnabled : false,
             }
@@ -361,24 +360,6 @@ export default function CombinedSettingsPage() {
               paymentData.stripeSecretKey = data.stripe.secretKey || paymentData.stripeSecretKey
               paymentData.stripeEnabled =
                 data.stripe.enabled !== undefined ? data.stripe.enabled : paymentData.stripeEnabled
-            }
-
-            if (data.phonepe) {
-              paymentData.phonePeMerchantId = data.phonepe.merchantId || paymentData.phonePeMerchantId
-              paymentData.phonePeSaltKey = data.phonepe.saltKey || paymentData.phonePeSaltKey
-              paymentData.phonePeSaltIndex = data.phonepe.saltIndex || paymentData.phonePeSaltIndex
-              paymentData.phonePeEnvironment = data.phonepe.environment || paymentData.phonePeEnvironment
-              paymentData.phonePeWebhookUrl = data.phonepe.webhookUrl || paymentData.phonePeWebhookUrl
-              paymentData.phonePeEnabled =
-                data.phonepe.enabled !== undefined ? data.phonepe.enabled : paymentData.phonePeEnabled
-            }
-
-            // Add PayPal nested structure handling
-            if (data.paypal) {
-              paymentData.paypalEnabled =
-                data.paypal.enabled !== undefined ? data.paypal.enabled : paymentData.paypalEnabled
-              paymentData.paypalClientId = data.paypal.clientId || paymentData.paypalClientId
-              paymentData.paypalClientSecret = data.paypal.clientSecret || paymentData.paypalClientSecret
             }
 
             console.log(`🔧 Processed payment data:`, paymentData)
@@ -428,11 +409,7 @@ export default function CombinedSettingsPage() {
 
       // For payment settings, send both flat and nested structure for maximum compatibility
       if (section === "payment") {
-        requestData = {
-          // Flat structure (for backward compatibility)
-          codEnabled: data.codEnabled,
-          onlinePaymentEnabled: data.razorpayEnabled || data.stripeEnabled || data.phonePeEnabled,
-
+        const payload = {
           // Razorpay
           razorpayEnabled: data.razorpayEnabled,
           razorpayKeyId: data.razorpayKeyId,
@@ -443,18 +420,16 @@ export default function CombinedSettingsPage() {
           stripePublicKey: data.stripePublicKey,
           stripeSecretKey: data.stripeSecretKey,
 
-          // PhonePe
-          phonePeEnabled: data.phonePeEnabled,
-          phonePeMerchantId: data.phonePeMerchantId,
-          phonePeSaltKey: data.phonePeSaltKey,
-          phonePeSaltIndex: data.phonePeSaltIndex,
-          phonePeEnvironment: data.phonePeEnvironment,
-          phonePeWebhookUrl: data.phonePeWebhookUrl,
-
-          // PayPal (add missing fields)
+          // PayPal
           paypalEnabled: data.paypalEnabled || false,
           paypalClientId: data.paypalClientId || "",
           paypalClientSecret: data.paypalClientSecret || "",
+
+          phonePeEnabled: data.phonePeEnabled,
+
+          // COD and Online Payment
+          codEnabled: data.codEnabled,
+          onlinePaymentEnabled: data.onlinePaymentEnabled,
 
           // Nested structure (for new backend)
           razorpay: {
@@ -469,19 +444,20 @@ export default function CombinedSettingsPage() {
           },
           phonepe: {
             enabled: data.phonePeEnabled,
-            merchantId: data.phonePeMerchantId,
-            saltKey: data.phonePeSaltKey,
-            saltIndex: data.phonePeSaltIndex,
-            environment: data.phonePeEnvironment,
-            webhookUrl: data.phonePeWebhookUrl,
+            merchantId: data.phonepe.merchantId,
+            appId: data.phonepe.appId,
+            saltKey: data.phonepe.saltKey,
+            saltIndex: data.phonepe.saltIndex,
+            environment: data.phonepe.environment,
           },
-          // Add PayPal nested structure
           paypal: {
-            enabled: data.paypalEnabled || false,
-            clientId: data.paypalClientId || "",
-            clientSecret: data.paypalClientSecret || "",
+            enabled: data.paypalEnabled,
+            clientId: data.paypalClientId,
+            clientSecret: data.paypalClientSecret,
           },
         }
+
+        requestData = payload
       }
 
       if (section === "shipping") {
@@ -590,21 +566,20 @@ export default function CombinedSettingsPage() {
             razorpayKeyId: data.payment.razorpayKeyId || data.payment.razorpay?.keyId || "",
             razorpayKeySecret: data.payment.razorpayKeySecret || data.payment.razorpay?.keySecret || "",
             razorpayEnabled: data.payment.razorpayEnabled || data.payment.razorpay?.enabled || false,
-
             stripePublicKey: data.payment.stripePublicKey || data.payment.stripe?.publishableKey || "",
             stripeSecretKey: data.payment.stripeSecretKey || data.payment.stripe?.secretKey || "",
             stripeEnabled: data.payment.stripeEnabled || data.payment.stripe?.enabled || false,
-
-            phonePeMerchantId: data.payment.phonePeMerchantId || data.payment.phonepe?.merchantId || "",
-            phonePeSaltKey: data.payment.phonePeSaltKey || data.payment.phonepe?.saltKey || "",
-            phonePeSaltIndex: data.payment.phonePeSaltIndex || data.payment.phonepe?.saltIndex || "",
-            phonePeEnvironment: data.payment.phonePeEnvironment || data.payment.phonepe?.environment || "sandbox",
-            phonePeWebhookUrl: data.payment.phonePeWebhookUrl || data.payment.phonepe?.webhookUrl || "",
-            phonePeEnabled: data.payment.phonePeEnabled || data.payment.phonepe?.enabled || false,
-
-            codEnabled: data.payment.codEnabled !== undefined ? data.payment.codEnabled : true,
-            onlinePaymentEnabled:
-              data.payment.onlinePaymentEnabled !== undefined ? data.payment.onlinePaymentEnabled : false,
+            paypalClientId: data.payment.paypalClientId || data.payment.paypal?.clientId || "",
+            paypalClientSecret: data.payment.paypalClientSecret || data.payment.paypal?.clientSecret || "",
+            paypalEnabled: data.payment.paypalEnabled || data.payment.paypal?.enabled || false,
+            phonepe: {
+              merchantId: data.payment.phonepe?.merchantId || "",
+              appId: data.payment.phonepe?.appId || "",
+              saltKey: data.payment.phonepe?.saltKey || "",
+              saltIndex: data.payment.phonepe?.saltIndex || 1,
+              environment: data.payment.phonepe?.environment || "sandbox",
+            },
+            phonePeEnabled: data.payment.phonepe?.enabled || false,
           }
 
           console.log("🔧 Processed payment data from store:", paymentData)
@@ -683,15 +658,23 @@ export default function CombinedSettingsPage() {
     }))
   }
 
-  const handlePaymentChange = (field: keyof PaymentSettings, value: string | boolean) => {
-    console.log(`🔧 Payment field changed: ${field} = ${value}`)
+  const handlePaymentChange = (field: string, value: any) => {
     setPaymentSettings((prev) => {
-      const updated = {
+      if (field.startsWith("phonepe.")) {
+        const phonePeField = field.replace("phonepe.", "")
+        return {
+          ...prev,
+          phonepe: {
+            ...prev.phonepe,
+            [phonePeField]: value,
+          },
+        }
+      }
+
+      return {
         ...prev,
         [field]: value,
       }
-      console.log("🔧 Updated payment settings:", updated)
-      return updated
     })
   }
 
@@ -1123,7 +1106,7 @@ export default function CombinedSettingsPage() {
                         <div className="flex items-center gap-3">
                           <Smartphone className="h-5 w-5 text-purple-600" />
                           <h3 className="text-base font-semibold text-gray-900">PhonePe Configuration</h3>
-                          <Badge className="bg-purple-100 text-purple-800 border-purple-200">New</Badge>
+                          <Badge className="bg-purple-100 text-purple-800 border-purple-200">Active</Badge>
                         </div>
                         <Switch
                           checked={paymentSettings.phonePeEnabled}
@@ -1137,23 +1120,22 @@ export default function CombinedSettingsPage() {
                           </Label>
                           <Input
                             id="phonePeMerchantId"
-                            value={paymentSettings.phonePeMerchantId}
-                            onChange={(e) => handlePaymentChange("phonePeMerchantId", e.target.value)}
+                            value={paymentSettings.phonepe.merchantId}
+                            onChange={(e) => handlePaymentChange("phonepe.merchantId", e.target.value)}
                             placeholder="MERCHANTUAT"
                             className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.phonePeEnabled}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="phonePeSaltKey" className="text-sm font-semibold text-gray-700">
-                            Salt Key
+                          <Label htmlFor="phonePeAppId" className="text-sm font-semibold text-gray-700">
+                            App ID
                           </Label>
                           <Input
-                            id="phonePeSaltKey"
-                            type="password"
-                            value={paymentSettings.phonePeSaltKey}
-                            onChange={(e) => handlePaymentChange("phonePeSaltKey", e.target.value)}
-                            placeholder="••••••••••••••••"
+                            id="phonePeAppId"
+                            value={paymentSettings.phonepe.appId}
+                            onChange={(e) => handlePaymentChange("phonepe.appId", e.target.value)}
+                            placeholder="APP_ID"
                             className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.phonePeEnabled}
                           />
@@ -1161,59 +1143,64 @@ export default function CombinedSettingsPage() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <Label htmlFor="phonePeSaltIndex" className="text-sm font-semibold text-gray-700">
-                            Salt Index
+                          <Label htmlFor="phonePeSaltKey" className="text-sm font-semibold text-gray-700">
+                            Salt Key
                           </Label>
                           <Input
-                            id="phonePeSaltIndex"
-                            value={paymentSettings.phonePeSaltIndex}
-                            onChange={(e) => handlePaymentChange("phonePeSaltIndex", e.target.value)}
-                            placeholder="1"
+                            id="phonePeSaltKey"
+                            type="password"
+                            value={paymentSettings.phonepe.saltKey}
+                            onChange={(e) => handlePaymentChange("phonepe.saltKey", e.target.value)}
+                            placeholder="••••••••••••••••"
                             className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.phonePeEnabled}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="phonePeEnvironment" className="text-sm font-semibold text-gray-700">
-                            Environment
+                          <Label htmlFor="phonePeSaltIndex" className="text-sm font-semibold text-gray-700">
+                            Salt Index
                           </Label>
-                          <Select
-                            value={paymentSettings.phonePeEnvironment}
-                            onValueChange={(value: "sandbox" | "production") =>
-                              handlePaymentChange("phonePeEnvironment", value)
+                          <Input
+                            id="phonePeSaltIndex"
+                            type="number"
+                            value={paymentSettings.phonepe.saltIndex}
+                            onChange={(e) =>
+                              handlePaymentChange("phonepe.saltIndex", Number.parseInt(e.target.value) || 1)
                             }
+                            placeholder="1"
+                            className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                             disabled={!paymentSettings.phonePeEnabled}
-                          >
-                            <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                              <SelectValue placeholder="Select environment" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
-                              <SelectItem value="production">Production (Live)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="phonePeWebhookUrl" className="text-sm font-semibold text-gray-700">
-                          Webhook URL (Optional)
+                        <Label htmlFor="phonePeEnvironment" className="text-sm font-semibold text-gray-700">
+                          Environment
                         </Label>
-                        <Input
-                          id="phonePeWebhookUrl"
-                          type="url"
-                          value={paymentSettings.phonePeWebhookUrl}
-                          onChange={(e) => handlePaymentChange("phonePeWebhookUrl", e.target.value)}
-                          placeholder="https://yourstore.com/api/phonepe/webhook"
-                          className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                        <Select
+                          value={paymentSettings.phonepe.environment}
+                          onValueChange={(value: "sandbox" | "production") =>
+                            handlePaymentChange("phonepe.environment", value)
+                          }
                           disabled={!paymentSettings.phonePeEnabled}
-                        />
-                        <p className="text-xs text-gray-500">URL to receive payment status updates from PhonePe</p>
+                        >
+                          <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                            <SelectValue placeholder="Select environment" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
+                            <SelectItem value="production">Production (Live)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       {paymentSettings.phonePeEnabled && (
                         <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
                           <p className="text-sm text-purple-800">
                             <CheckCircle className="h-4 w-4 inline mr-1" />
-                            PhonePe is enabled for {paymentSettings.phonePeEnvironment} environment
+                            PhonePe is enabled for {paymentSettings.phonepe.environment} environment
+                          </p>
+                          <p className="text-xs text-purple-600 mt-1">
+                            Merchant: {paymentSettings.phonepe.merchantId || "Not configured"}
                           </p>
                         </div>
                       )}
